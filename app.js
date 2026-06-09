@@ -5689,7 +5689,7 @@ window.toggleAdminStar = function(submissionId) {
 };
 
 // 9-2. Toggle Prize Delivered Marking
-window.toggleAdminPrize = async function(submissionId) {
+window.toggleAdminPrize = function(submissionId) {
   const entry = adminAllSubmissions.find(s => s.id === submissionId);
   if (!entry) return;
 
@@ -5703,28 +5703,6 @@ window.toggleAdminPrize = async function(submissionId) {
   const localPrizes = JSON.parse(localStorage.getItem("soro_admin_prizes") || "{}");
   localPrizes[submissionId] = currentStatus;
   localStorage.setItem("soro_admin_prizes", JSON.stringify(localPrizes));
-
-  // Try to update on the remote DB if API is available
-  if (GOOGLE_SHEET_API_URL) {
-    const payload = {
-      action: "updateSubmissionPrizeStatus",
-      id: submissionId,
-      prizeStatus: currentStatus
-    };
-    try {
-      const response = await fetch(GOOGLE_SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify(payload)
-      });
-      const result = await response.json();
-      if (result.status !== "success") {
-        console.warn("API prize update failed:", result.message);
-      }
-    } catch (err) {
-      console.warn("API prize update network error:", err);
-    }
-  }
 
   // Also update the backup in soro_submissions local storage if it exists there
   const allSubmissions = JSON.parse(localStorage.getItem("soro_submissions") || "[]");
@@ -5741,7 +5719,7 @@ window.toggleAdminPrize = async function(submissionId) {
     localStorage.setItem("soro_submissions", JSON.stringify(allSubmissions));
   }
 
-  // Visual pulse feedback trigger
+  // 즉시 UI 갱신 및 애니메이션 구동 (0ms 반응성 확보)
   const cardEl = document.querySelector(`.admin-gallery-card[data-id="${submissionId}"]`);
   if (cardEl) {
     const btn = cardEl.querySelector(".prize-btn");
@@ -5750,10 +5728,31 @@ window.toggleAdminPrize = async function(submissionId) {
       setTimeout(() => btn.classList.remove("active"), 500);
     }
   }
-
-  // Refresh 어드민 패널 화면
   renderAdminKPIs();
   renderAdminSubmissionsGallery();
+
+  // Try to update on the remote DB if API is available (비동기 비동작 전송 - Non-blocking)
+  if (GOOGLE_SHEET_API_URL) {
+    const payload = {
+      action: "updateSubmissionPrizeStatus",
+      id: submissionId,
+      prizeStatus: currentStatus
+    };
+    fetch(GOOGLE_SHEET_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: JSON.stringify(payload)
+    })
+    .then(response => response.json())
+    .then(result => {
+      if (result.status !== "success") {
+        console.warn("API prize update failed:", result.message);
+      }
+    })
+    .catch(err => {
+      console.warn("API prize update network error:", err);
+    });
+  }
 };
 
 // 10. Render Submissions (Redirect function to maintain API compatibility)
