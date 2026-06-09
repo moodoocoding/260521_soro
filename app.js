@@ -756,6 +756,83 @@ async function handleSignUp(grade, classNum, number, name, password) {
   return true;
 }
 
+// REST API or Local Password Reset
+async function handleResetPassword(grade, classNum, number, name, newPassword) {
+  const userKey = `${grade}_${classNum}_${number}_${name}`;
+  const hashedPassword = await hashPassword(newPassword);
+
+  const payload = {
+    action: "resetPassword",
+    userKey: userKey,
+    password: hashedPassword
+  };
+
+  // 1. Remote DB Cloud Mode (Google Sheets Apps Script API URL active)
+  if (GOOGLE_SHEET_API_URL) {
+    showToast("보안 서버에 비밀번호 초기화를 요청 중...", "info");
+    try {
+      const response = await fetch(GOOGLE_SHEET_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: JSON.stringify(payload)
+      });
+      const result = await response.json();
+
+      if (result.status === "error") {
+        showToast(result.message, "error");
+        return false;
+      }
+
+      // 원격 성공 시, 로컬스토리지 백업 데이터 마이그레이션 및 자동 로그인 처리
+      const loggedUser = { userKey, grade, classNum, number, name };
+      currentUser = loggedUser;
+      localStorage.setItem("soro_current_user", JSON.stringify(loggedUser));
+
+      // 기기 로컬스토리지의 백업 사용자 목록 정보도 갱신
+      const users = JSON.parse(localStorage.getItem("soro_users") || "[]");
+      const idx = users.findIndex(u => u.userKey === userKey);
+      if (idx !== -1) {
+        users[idx].password = hashedPassword;
+      } else {
+        users.push({ userKey, grade, classNum, number, name, password: hashedPassword });
+      }
+      localStorage.setItem("soro_users", JSON.stringify(users));
+
+      updateUIForLoggedInState();
+      updateLiveCounters();
+      closeAuthDrawer();
+      if (activeContest) openContestDetails(activeContest.id);
+      showToast(`비밀번호 재설정 및 자동 로그인이 완료되었습니다! 🎉`, "success");
+      return true;
+    } catch (error) {
+      console.error(error);
+      showToast("원격 구글 서버 접속이 원활하지 않습니다. 로컬 초기화를 시도합니다.", "error");
+    }
+  }
+
+  // 2. Fallback Local Mode
+  const users = JSON.parse(localStorage.getItem("soro_users") || "[]");
+  const idx = users.findIndex(u => u.userKey === userKey);
+  if (idx === -1) {
+    showToast("입력하신 정보와 일치하는 학생 계정이 존재하지 않습니다.", "error");
+    return false;
+  }
+
+  users[idx].password = hashedPassword;
+  localStorage.setItem("soro_users", JSON.stringify(users));
+
+  const loggedUser = { userKey, grade, classNum, number, name };
+  currentUser = loggedUser;
+  localStorage.setItem("soro_current_user", JSON.stringify(loggedUser));
+
+  updateUIForLoggedInState();
+  updateLiveCounters();
+  closeAuthDrawer();
+  if (activeContest) openContestDetails(activeContest.id);
+  showToast(`비밀번호 재설정 및 자동 로그인이 완료되었습니다! 🎉`, "success");
+  return true;
+}
+
 // REST API or Local Login
 async function handleLogin(grade, classNum, number, name, password) {
   const userKey = `${grade}_${classNum}_${number}_${name}`;
@@ -4290,6 +4367,64 @@ function setupEventListeners() {
     }
   });
 
+  // Handle Reset Password click
+  const resetBtn = document.getElementById("auth-reset-pw-btn");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", () => {
+      const grade = document.getElementById("login-grade");
+      const classNum = document.getElementById("login-class");
+      const number = document.getElementById("login-number");
+      const name = document.getElementById("login-name");
+
+      // 비밀번호 제외한 유효성 검증
+      document.querySelectorAll("#login-form .form-group").forEach(g => {
+        if (!g.contains(document.getElementById("login-password"))) {
+          g.classList.remove("has-error");
+        }
+      });
+
+      let isValid = true;
+      if (!grade.value) {
+        grade.parentElement.classList.add("has-error");
+        isValid = false;
+      }
+      if (!classNum.value || classNum.value < 1) {
+        classNum.parentElement.classList.add("has-error");
+        isValid = false;
+      }
+      if (!number.value || number.value < 1) {
+        number.parentElement.classList.add("has-error");
+        isValid = false;
+      }
+      if (!name.value.trim()) {
+        name.parentElement.classList.add("has-error");
+        isValid = false;
+      }
+
+      if (!isValid) {
+        showToast("비밀번호 초기화를 위해 학년, 반, 번호, 이름을 먼저 모두 정확히 선택/입력해 주세요.", "error");
+        return;
+      }
+
+      // 새 비밀번호 입력 받기
+      const newPass = prompt("새롭게 사용할 비밀번호를 입력해 주세요. (최소 4자 이상)");
+      if (newPass === null) return; // 취소 클릭 시 종료
+      if (newPass.length < 4) {
+        showToast("비밀번호는 최소 4자 이상이어야 합니다.", "error");
+        return;
+      }
+
+      const confirmPass = prompt("비밀번호 확인을 위해 한 번 더 입력해 주세요.");
+      if (confirmPass === null) return;
+      if (newPass !== confirmPass) {
+        showToast("입력한 비밀번호가 서로 일치하지 않습니다.", "error");
+        return;
+      }
+
+      handleResetPassword(grade.value, classNum.value.trim(), number.value.trim(), name.value.trim(), newPass);
+    });
+  }
+
   // Handle Signup submission
   const signupForm = document.getElementById("signup-form");
   signupForm.addEventListener("submit", (e) => {
@@ -6010,6 +6145,29 @@ function doPost(e) {
         response = { status: "success", message: "인증 성공" };
       } else {
         response = { status: "error", message: "학년/반/번호/이름 또는 비밀번호가 틀렸습니다." };
+      }
+    }
+
+    // 2.5. 비밀번호 초기화 액션 (Users 시트 수정)
+    else if (requestData.action === "resetPassword") {
+      var sheet = ss.getSheetByName("Users");
+      var updated = false;
+      
+      if (sheet) {
+        var data = sheet.getDataRange().getValues();
+        for (var i = 1; i < data.length; i++) {
+          if (data[i][0] === requestData.userKey) {
+            sheet.getRange(i + 1, 6).setValue(requestData.password); // 6번째 열 (Password) 수정
+            updated = true;
+            break;
+          }
+        }
+      }
+      
+      if (updated) {
+        response = { status: "success", message: "비밀번호 초기화 완료" };
+      } else {
+        response = { status: "error", message: "일치하는 학생 정보(계정)가 존재하지 않습니다." };
       }
     }
     
