@@ -844,6 +844,11 @@ textarea {
   transition: border-color var(--transition-fast);
 }
 
+select option {
+  background-color: #141416;
+  color: #ffffff;
+}
+
 input:focus, select:focus, textarea:focus {
   border-color: var(--text-primary);
   box-shadow: none; /* No shadow glow */
