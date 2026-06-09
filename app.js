@@ -972,6 +972,20 @@ function openAuthDrawer(defaultTab = "login") {
   switchAuthTab(defaultTab);
 }
 
+function resetPasswordResetUI() {
+  const passwordGroup = document.getElementById("login-confirm-password-group");
+  if (passwordGroup) passwordGroup.style.display = "none";
+
+  const passwordLabel = document.querySelector("label[for='login-password']");
+  if (passwordLabel) passwordLabel.textContent = "비밀번호";
+
+  const loginSubmitBtn = document.querySelector("#login-form button[type='submit']");
+  if (loginSubmitBtn) {
+    loginSubmitBtn.disabled = false;
+    loginSubmitBtn.style.opacity = "1";
+  }
+}
+
 function closeAuthDrawer() {
   const drawer = document.getElementById("auth-drawer");
   drawer.setAttribute("aria-hidden", "true");
@@ -991,6 +1005,7 @@ function closeAuthDrawer() {
   }
 
   document.querySelectorAll(".auth-panel .form-group.has-error").forEach(g => g.classList.remove("has-error"));
+  resetPasswordResetUI();
 }
 
 function switchAuthTab(tabName) {
@@ -998,6 +1013,8 @@ function switchAuthTab(tabName) {
   const tabSignup = document.getElementById("tab-signup-btn");
   const panelLogin = document.getElementById("login-panel");
   const panelSignup = document.getElementById("signup-panel");
+
+  resetPasswordResetUI();
 
   if (tabName === "login") {
     tabLogin.classList.add("active");
@@ -4375,10 +4392,15 @@ function setupEventListeners() {
       const classNum = document.getElementById("login-class");
       const number = document.getElementById("login-number");
       const name = document.getElementById("login-name");
+      const passwordGroup = document.getElementById("login-confirm-password-group");
+      const passwordInput = document.getElementById("login-password");
+      const confirmInput = document.getElementById("login-confirm-password");
+      const passwordLabel = document.querySelector("label[for='login-password']");
+      const loginSubmitBtn = document.querySelector("#login-form button[type='submit']");
 
       // 비밀번호 제외한 유효성 검증
       document.querySelectorAll("#login-form .form-group").forEach(g => {
-        if (!g.contains(document.getElementById("login-password"))) {
+        if (!g.contains(passwordInput) && !g.contains(confirmInput)) {
           g.classList.remove("has-error");
         }
       });
@@ -4406,22 +4428,41 @@ function setupEventListeners() {
         return;
       }
 
-      // 새 비밀번호 입력 받기
-      const newPass = prompt("새롭게 사용할 비밀번호를 입력해 주세요. (최소 4자 이상)");
-      if (newPass === null) return; // 취소 클릭 시 종료
-      if (newPass.length < 4) {
-        showToast("비밀번호는 최소 4자 이상이어야 합니다.", "error");
-        return;
-      }
+      // 비밀번호 확인 칸이 켜져있지 않은 상태 (1차 클릭)
+      if (passwordGroup.style.display === "none") {
+        passwordGroup.style.display = "block";
+        if (passwordLabel) passwordLabel.textContent = "새 비밀번호 설정";
+        if (loginSubmitBtn) {
+          loginSubmitBtn.disabled = true;
+          loginSubmitBtn.style.opacity = "0.5";
+        }
+        passwordInput.value = "";
+        confirmInput.value = "";
+        passwordInput.focus();
+        showToast("새로 지정할 비밀번호를 입력하고, 그 밑에 한번 더 확인 입력한 후 초기화 버튼을 다시 눌러주세요.", "info");
+      } 
+      // 비밀번호 확인 칸이 이미 켜져있는 상태 (2차 클릭)
+      else {
+        passwordInput.parentElement.classList.remove("has-error");
+        confirmInput.parentElement.classList.remove("has-error");
 
-      const confirmPass = prompt("비밀번호 확인을 위해 한 번 더 입력해 주세요.");
-      if (confirmPass === null) return;
-      if (newPass !== confirmPass) {
-        showToast("입력한 비밀번호가 서로 일치하지 않습니다.", "error");
-        return;
-      }
+        let pwValid = true;
+        if (!passwordInput.value || passwordInput.value.length < 4) {
+          passwordInput.parentElement.classList.add("has-error");
+          pwValid = false;
+        }
+        if (passwordInput.value !== confirmInput.value) {
+          confirmInput.parentElement.classList.add("has-error");
+          pwValid = false;
+        }
 
-      handleResetPassword(grade.value, classNum.value.trim(), number.value.trim(), name.value.trim(), newPass);
+        if (!pwValid) {
+          showToast("새 비밀번호는 최소 4자 이상이어야 하며 두 칸의 입력값이 동일해야 합니다.", "error");
+          return;
+        }
+
+        handleResetPassword(grade.value, classNum.value.trim(), number.value.trim(), name.value.trim(), passwordInput.value);
+      }
     });
   }
 
