@@ -50,14 +50,14 @@ const CONTESTS_DATA = [
     monthText: "6월",
     period: "2026. 6. 1.(월) ~ 2026. 6. 30.(화)",
     summary: "zepquiz에 접속하여 저작권 문제를 풀고 완료 스크린샷을 찍어서 업로드하세요!",
-    description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 최종 완료 화면(점수 또는 완료 문구가 보이는 화면)을 캡처하여 증빙 자료로 업로드해 주세요.",
+    description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 최종 완료 화면(점수 또는 완료 문구가 보이는 화면)을 캡처하여 증빙 자료로 업로드해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
     rules: [
       "참가 대상: 본교 3~6학년 학생 누구나",
       "퀴즈 내용: 저작권",
-      "제한 사항: 학교 구글 아이디로 로그인하여 문제 풀 것",
+      "제한 사항: <strong style=\"color: #e63946;\">학교 구글 아이디로 로그인하여 문제 풀 것 (★반드시 로그인 후 풀이에 응해야 인정됩니다!)</strong>",
       "제출물: 젭퀴즈를 다 푼 완료 화면 스크린샷",
       "특별 혜택: 학급 모든 친구가 제출할 경우 과자 지급",
-      "젭퀴즈 링크: <a href=\"https://quiz.zep.us/play/R53q9r\" target=\"_blank\" class=\"contest-link\">zepquiz 바로가기 (https://quiz.zep.us/play/R53q9r)</a>"
+      "젭퀴즈 링크: <a href=\"https://quiz.zep.us/play/R53q9r\" target=\"_blank\" class=\"contest-link\" onclick=\"alert('⚠️ 반드시 학교 구글 아이디로 로그인한 후 문제를 풀어야 제출이 인정됩니다!')\">zepquiz 바로가기 (https://quiz.zep.us/play/R53q9r)</a>"
     ],
     evaluationCriteria: [
       { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "50%" },
