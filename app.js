@@ -985,6 +985,13 @@ function resetPasswordResetUI() {
     loginSubmitBtn.style.opacity = "1";
   }
 
+  const resetBtn = document.getElementById("auth-reset-pw-btn");
+  if (resetBtn) {
+    resetBtn.innerHTML = "🔑 비밀번호 초기화";
+    resetBtn.classList.remove("btn-primary");
+    resetBtn.classList.add("btn-secondary");
+  }
+
   const passwordInput = document.getElementById("login-password");
   const confirmInput = document.getElementById("login-confirm-password");
   if (passwordInput) passwordInput.value = "";
@@ -4404,55 +4411,54 @@ function setupEventListeners() {
       const passwordLabel = document.querySelector("label[for='login-password']");
       const loginSubmitBtn = document.querySelector("#login-form button[type='submit']");
 
-      // 모든 필드 에러 상태 청소
-      document.querySelectorAll("#login-form .form-group").forEach(g => g.classList.remove("has-error"));
-
-      let isValid = true;
-      if (!grade.value) {
-        grade.parentElement.classList.add("has-error");
-        isValid = false;
-      }
-      if (!classNum.value || classNum.value < 1) {
-        classNum.parentElement.classList.add("has-error");
-        isValid = false;
-      }
-      if (!number.value || number.value < 1) {
-        number.parentElement.classList.add("has-error");
-        isValid = false;
-      }
-      if (!name.value.trim()) {
-        name.parentElement.classList.add("has-error");
-        isValid = false;
-      }
-
-      if (!isValid) {
-        showToast("비밀번호 초기화를 위해 학년, 반, 번호, 이름을 먼저 모두 정확히 선택/입력해 주세요.", "error");
-        return;
-      }
-
-      // 1. 비밀번호 확인 입력창이 아직 안 보이는 상태 (1차 클릭)
-      if (passwordGroup.style.display === "none") {
-        // 첫 번째 비밀번호 필드에 변경할 비밀번호가 올바르게 들어갔는지 확인
-        if (!passwordInput.value || passwordInput.value.length < 4) {
-          passwordInput.parentElement.classList.add("has-error");
-          showToast("비밀번호 칸에 새로 변경할 비밀번호(최소 4자 이상)를 먼저 입력해 주세요.", "error");
-          passwordInput.focus();
-          return;
-        }
-
-        // 비밀번호 확인란을 노출하고 UI 라벨을 업데이트
+      // 1. 비밀번호 확인 입력창이 아직 안 보이는 상태 (초기화 모드 진입 시점)
+      if (passwordGroup.style.display === "none" || !passwordGroup.style.display) {
+        // 첫 번째 비밀번호 필드에 변경할 비밀번호가 올바르게 들어갔는지와 무관하게 무조건 노출
         passwordGroup.style.display = "block";
         if (passwordLabel) passwordLabel.textContent = "새 비밀번호 설정";
         if (loginSubmitBtn) {
           loginSubmitBtn.disabled = true;
           loginSubmitBtn.style.opacity = "0.5";
         }
+        
+        // 비밀번호 초기화 버튼 라벨 및 클래스 동적 액티브 변경
+        resetBtn.innerHTML = "🔑 비밀번호 초기화 완료";
+        resetBtn.classList.remove("btn-secondary");
+        resetBtn.classList.add("btn-primary");
+        
+        passwordInput.value = "";
         confirmInput.value = "";
-        confirmInput.focus();
-        showToast("비밀번호 확인란에 동일하게 한 번 더 입력한 뒤, 초기화 버튼을 한 번 더 눌러주세요.", "info");
-      }
-      // 2. 비밀번호 확인 입력창이 이미 보이고 있는 상태 (2차 클릭)
+        passwordInput.focus();
+        showToast("새로 지정할 비밀번호를 입력하고, 그 밑에 한번 더 확인 입력한 후 초기화 완료 버튼을 눌러주세요.", "info");
+      } 
+      // 2. 비밀번호 확인 입력창이 이미 보이고 있는 상태 (실제 초기화 완료 실행 시점)
       else {
+        // 모든 필드 에러 상태 청소
+        document.querySelectorAll("#login-form .form-group").forEach(g => g.classList.remove("has-error"));
+
+        let isValid = true;
+        if (!grade.value) {
+          grade.parentElement.classList.add("has-error");
+          isValid = false;
+        }
+        if (!classNum.value || classNum.value < 1) {
+          classNum.parentElement.classList.add("has-error");
+          isValid = false;
+        }
+        if (!number.value || number.value < 1) {
+          number.parentElement.classList.add("has-error");
+          isValid = false;
+        }
+        if (!name.value.trim()) {
+          name.parentElement.classList.add("has-error");
+          isValid = false;
+        }
+
+        if (!isValid) {
+          showToast("비밀번호 초기화를 위해 학년, 반, 번호, 이름을 먼저 모두 정확히 선택/입력해 주세요.", "error");
+          return;
+        }
+
         let pwValid = true;
         if (!passwordInput.value || passwordInput.value.length < 4) {
           passwordInput.parentElement.classList.add("has-error");
