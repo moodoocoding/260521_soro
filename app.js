@@ -76,7 +76,7 @@ const CONTESTS_DATA = [
       "제한 사항: <strong style=\"color: #e63946;\">학교 구글 아이디로 로그인하여 문제 풀 것 (★반드시 로그인 후 풀이에 응해야 인정됩니다!)</strong>",
       "제출물: 젭퀴즈를 다 푼 완료 화면 스크린샷",
       "특별 혜택: 학급 모든 친구가 제출할 경우 과자 지급",
-      "젭퀴즈 링크: <a href=\"https://quiz.zep.us/play/R53q9r\" target=\"_blank\" class=\"contest-link\" onclick=\"alert('⚠️ 반드시 학교 구글 아이디로 로그인한 후 문제를 풀어야 제출이 인정됩니다!')\">zepquiz 바로가기 (https://quiz.zep.us/play/R53q9r)</a>"
+      "젭퀴즈 링크: <a href=\"https://quiz.zep.us/play/R53q9r\" target=\"_blank\" class=\"contest-link\" onclick=\"alert('⚠️ 반드시 학교 구글 아이디로 로그인한 후 문제를 풀어야 제출이 인정됩니다!'); alert('📸 문제를 다 푼 후 완료 화면 스크린샷을 찍어서 제출해 주세요!');\">zepquiz 바로가기 (https://quiz.zep.us/play/R53q9r)</a>"
     ],
     evaluationCriteria: [
       { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "50%" },
@@ -1939,7 +1939,7 @@ function openContestDetails(contestId) {
 
   drawerBadge.textContent = contest.monthText;
   drawerTitle.textContent = contest.title;
-  drawerSummary.textContent = contest.description;
+  drawerSummary.innerHTML = contest.description;
 
   const visualHeader = document.getElementById("drawer-visual");
   visualHeader.style.background = getGradientForContest(contest.id);
