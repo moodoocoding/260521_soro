@@ -57,7 +57,7 @@ const CONTESTS_DATA = [
       "제한 사항: 학교 구글 아이디로 로그인하여 문제 풀 것",
       "제출물: 젭퀴즈를 다 푼 완료 화면 스크린샷",
       "특별 혜택: 학급 모든 친구가 제출할 경우 과자 지급",
-      "참고 링크: <a href=\"https://quiz.zep.us/play/R533q9r\" target=\"_blank\" class=\"contest-link\">zepquiz 바로가기 (https://quiz.zep.us/play/R533q9r)</a>"
+      "젭퀴즈 링크: <a href=\"https://quiz.zep.us/play/R53q9r\" target=\"_blank\" class=\"contest-link\">zepquiz 바로가기 (https://quiz.zep.us/play/R53q9r)</a>"
     ],
     evaluationCriteria: [
       { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "50%" },
