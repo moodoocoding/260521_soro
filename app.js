@@ -4414,7 +4414,7 @@ function setupEventListeners() {
       // 1. 비밀번호 확인 입력창이 아직 안 보이는 상태 (초기화 모드 진입 시점)
       if (passwordGroup.style.display === "none" || !passwordGroup.style.display) {
         // 첫 번째 비밀번호 필드에 변경할 비밀번호가 올바르게 들어갔는지와 무관하게 무조건 노출
-        passwordGroup.style.display = "block";
+        passwordGroup.style.display = "flex";
         if (passwordLabel) passwordLabel.textContent = "새 비밀번호 설정";
         if (loginSubmitBtn) {
           loginSubmitBtn.disabled = true;
