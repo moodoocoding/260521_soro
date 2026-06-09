@@ -5,6 +5,25 @@
 const SECURE_API_ENCODED = "aHR0cHM6Ly9zY3JpcHQuZ29vZ2xlLmNvbS9tYWNyb3Mvcy9BS2Z5Y2J4OGpvNzZtSmt4U2o1dWIteXN4U1VGaE9HSV9VM3kyRG4tdzRYa3JISXg5U05pbWV0a0V0WGN2aGZjZ3FTdFlzUHovZXhlYw==";
 const GOOGLE_SHEET_API_URL = atob(SECURE_API_ENCODED);
 
+// contestLocks global object and fetch function
+let contestLocks = {};
+async function fetchContestLocks() {
+  if (!GOOGLE_SHEET_API_URL) return;
+  try {
+    const response = await fetch(GOOGLE_SHEET_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: JSON.stringify({ action: "getContestLocks" })
+    });
+    const result = await response.json();
+    if (result.status === "success") {
+      contestLocks = result.data || {};
+    }
+  } catch (e) {
+    console.error("Failed to fetch contest locks:", e);
+  }
+}
+
 // ====================================================
 // CONTEST DATA AND INLINE ILLUSTRATIONS (SVG)
 // ====================================================
@@ -455,7 +474,7 @@ function getContestStatus(contestOrMonth) {
 
   // 1. 관리자 수동 제어 우선 검사 (Locks 설정이 명시적으로 존재한다면 절대적 우선순위)
   if (contestId) {
-    const locks = JSON.parse(localStorage.getItem("soro_contest_locks") || "{}");
+    const locks = contestLocks;
     if (locks[contestId] !== undefined) {
       return locks[contestId] === true ? "closed" : "active";
     }
@@ -548,10 +567,11 @@ function setupAuthFormDropdowns() {
   }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   initTheme();
   initVirtualTime();
   initUserSession();
+  await fetchContestLocks();
   renderContestGrid();
   setupEventListeners();
   setupAuthFormDropdowns();
@@ -727,7 +747,6 @@ async function handleSignUp(grade, classNum, number, name, password) {
     password: hashedPassword // 암호화된 패스워드 전송
   };
 
-  // 1. Remote DB Cloud Mode (Google Sheets Apps Script API URL active)
   if (GOOGLE_SHEET_API_URL) {
     showToast("클라우드 서버에 등록하고 있습니다...", "info");
     try {
@@ -753,38 +772,13 @@ async function handleSignUp(grade, classNum, number, name, password) {
       return true;
     } catch (error) {
       console.error(error);
-      showToast("원격 구글 서버 접속이 원활하지 않습니다. 로컬 저장을 이용합니다.", "error");
+      showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+      return false;
     }
-  }
-
-  // 2. Fallback Local Mode
-  const users = JSON.parse(localStorage.getItem("soro_users") || "[]");
-  const exists = users.find(u => u.userKey === userKey);
-  if (exists) {
-    showToast("이미 동일한 정보로 가입된 학생 계정이 존재합니다.", "error");
+  } else {
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
     return false;
   }
-
-  const newUser = {
-    userKey: userKey,
-    grade: grade,
-    classNum: classNum,
-    number: number,
-    name: name,
-    password: hashedPassword // 암호화된 패스워드 로컬 저장
-  };
-
-  users.push(newUser);
-  localStorage.setItem("soro_users", JSON.stringify(users));
-
-  currentUser = newUser;
-  localStorage.setItem("soro_current_user", JSON.stringify(newUser));
-  updateUIForLoggedInState();
-  updateLiveCounters();
-
-  if (activeContest) openContestDetails(activeContest.id);
-  showToast(`${name} 학생의 가입과 로그인이 완료되었습니다! 🎉`, "success");
-  return true;
 }
 
 // REST API or Local Login
@@ -792,11 +786,9 @@ async function handleLogin(grade, classNum, number, name, password) {
   const userKey = `${grade}_${classNum}_${number}_${name}`;
   const hashedPassword = await hashPassword(password);
 
-  // 1. Remote DB Cloud Mode
   if (GOOGLE_SHEET_API_URL) {
     showToast("보안 서버에서 로그인 확인 중...", "info");
     
-    // 우선 암호 해시 패스워드로 로그인 시도
     let payload = {
       action: "login",
       userKey: userKey,
@@ -811,7 +803,6 @@ async function handleLogin(grade, classNum, number, name, password) {
       });
       let result = await response.json();
 
-      // 로그인 실패 시, 구형 가입자(평문 패스워드 상태)인지 대조하여 하위 호환성 지원
       if (result.status === "error") {
         console.log("Hash login failed, attempting legacy plain text fallback...");
         
@@ -828,10 +819,9 @@ async function handleLogin(grade, classNum, number, name, password) {
           return false;
         }
         
-        // 평문 로그인에 성공했다면, 즉시 원격 구글 시트 DB의 구형 암호를 단방향 해시 코드로 자동 마이그레이션(업그레이드)
         console.log("Legacy plain text login success! Upgrading user credentials to SHA-256 hash...");
         const upgradePayload = {
-          action: "signUp", // 덮어쓰기 가입을 통해 원격 레코드 암호화 갱신
+          action: "signUp",
           userKey: userKey,
           grade: grade,
           classNum: classNum,
@@ -851,21 +841,10 @@ async function handleLogin(grade, classNum, number, name, password) {
         }
       }
 
-      // 로그인 성공 처리
       const loggedUser = { userKey, grade, classNum, number, name };
       currentUser = loggedUser;
       localStorage.setItem("soro_current_user", JSON.stringify(loggedUser));
       
-      // 기기 로컬스토리지의 백업 사용자 목록 정보도 해시값 비밀번호로 자동 마이그레이션 업데이트
-      const users = JSON.parse(localStorage.getItem("soro_users") || "[]");
-      const idx = users.findIndex(u => u.userKey === userKey);
-      if (idx !== -1) {
-        users[idx].password = hashedPassword;
-      } else {
-        users.push({ userKey, grade, classNum, number, name, password: hashedPassword });
-      }
-      localStorage.setItem("soro_users", JSON.stringify(users));
-
       updateUIForLoggedInState();
       updateLiveCounters();
       if (activeContest) openContestDetails(activeContest.id);
@@ -873,46 +852,13 @@ async function handleLogin(grade, classNum, number, name, password) {
       return true;
     } catch (error) {
       console.error(error);
-      showToast("클라우드 접속 지연. 로컬 저장소를 활용합니다.", "error");
+      showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+      return false;
     }
-  }
-
-  // 2. Fallback Local Mode (로컬 스토리지 하위 호환)
-  const users = JSON.parse(localStorage.getItem("soro_users") || "[]");
-  
-  const user = users.find(u => {
-    if (u.userKey !== userKey) return false;
-    
-    // 저장된 패스워드 형식이 64자 Hex 규격(이미 해싱된 상태)인지 체크
-    const isSavedPasswordHashed = u.password && u.password.length === 64 && /^[0-9a-fA-F]+$/.test(u.password);
-    if (isSavedPasswordHashed) {
-      return u.password === hashedPassword; // 해시값끼리 안전 비교
-    } else {
-      // 구형 평문 비교
-      const isMatch = u.password === password;
-      if (isMatch) {
-        // 일치 시 로컬 계정도 바로 해시 암호로 마이그레이션 자동 갱신
-        u.password = hashedPassword;
-        localStorage.setItem("soro_users", JSON.stringify(users));
-        console.log("Local backup user credentials upgraded to SHA-256 hash successfully.");
-      }
-      return isMatch;
-    }
-  });
-
-  if (!user) {
-    showToast("학년/반/번호/이름 또는 비밀번호가 일치하지 않습니다.", "error");
+  } else {
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
     return false;
   }
-
-  currentUser = user;
-  localStorage.setItem("soro_current_user", JSON.stringify(user));
-  updateUIForLoggedInState();
-  updateLiveCounters();
-
-  if (activeContest) openContestDetails(activeContest.id);
-  showToast(`${user.name} 학생, 로그인 성공을 환영합니다! 🚀`, "success");
-  return true;
 }
 
 // ====================================================
@@ -1857,7 +1803,7 @@ function switchDrawerTab(tabName) {
 
 function openContestDetails(contestId) {
   // Check for contest locks (managed by administrator)
-  const locks = JSON.parse(localStorage.getItem("soro_contest_locks") || "{}");
+  const locks = contestLocks;
   if (locks[contestId]) {
     showToast(`해당 공모전은 접수가 마감되었습니다. 🔒`, "error");
     return;
@@ -2241,7 +2187,6 @@ async function checkAndRenderSubmissionArea(contest) {
 // 서랍(Drawer) 내에서 직접 취소를 처리하는 전역 핸들러
 window.cancelSubmissionInDrawer = async function (entryId) {
   if (confirm("정말 이 작품의 접수를 취소하고 삭제하시겠습니까? 한 번 지워진 접수 데이터는 복구할 수 없습니다.")) {
-    // 1. Remote DB Cloud Mode
     if (GOOGLE_SHEET_API_URL) {
       showToast("클라우드에서 접수를 파기하고 있습니다...", "info");
       const payload = {
@@ -2260,23 +2205,18 @@ window.cancelSubmissionInDrawer = async function (entryId) {
           showToast(result.message, "error");
           return;
         }
+
+        showToast("작품 접수 정보가 성공적으로 취소 및 삭제 처리되었습니다. ✨", "success");
+        updateLiveCounters();
+        if (activeContest) {
+          checkAndRenderSubmissionArea(activeContest);
+        }
       } catch (e) {
         console.error("원격 삭제 에러:", e);
-        showToast("원격 서버 통신 지연. 로컬 삭제를 실행합니다.", "error");
+        showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
       }
-    }
-
-    // 2. Fallback Local Mode
-    const allSubmissions = JSON.parse(localStorage.getItem("soro_submissions") || "[]");
-    const updatedSubmissions = allSubmissions.filter(entry => entry.id !== entryId);
-    localStorage.setItem("soro_submissions", JSON.stringify(updatedSubmissions));
-
-    showToast("작품 접수 정보가 성공적으로 취소 및 삭제 처리되었습니다. ✨", "success");
-    updateLiveCounters();
-    
-    // 서랍 내용 리프레시
-    if (activeContest) {
-      checkAndRenderSubmissionArea(activeContest);
+    } else {
+      showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
     }
   }
 };
@@ -4567,7 +4507,14 @@ async function executeSubmit() {
     }
   }
 
-  // 1. Remote DB Cloud Mode
+  const submitBtn = document.getElementById("submit-btn");
+  let originalBtnText = "작품 제출 완료하기";
+  if (submitBtn) {
+    originalBtnText = submitBtn.textContent;
+    submitBtn.disabled = true;
+    submitBtn.textContent = "클라우드에 접수 중...";
+  }
+
   if (GOOGLE_SHEET_API_URL) {
     showToast("작품을 클라우드에 업로드 중...", "info");
     const payload = {
@@ -4584,33 +4531,31 @@ async function executeSubmit() {
 
       if (result.status === "error") {
         showToast(result.message, "error");
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalBtnText;
+        }
         return;
       }
 
       showToast(`${activeContest.title} 대회의 작품 접수가 성공적으로 클라우드에 기록되었습니다! 🎨`, "success");
-      // Save locally as well for offline/instant caching
-      const allSubmissions = JSON.parse(localStorage.getItem("soro_submissions") || "[]");
-      if (!allSubmissions.some(s => s.id === newEntry.id)) {
-        allSubmissions.push(newEntry);
-        localStorage.setItem("soro_submissions", JSON.stringify(allSubmissions));
-      }
       closeContestDrawer();
       updateLiveCounters();
-      return;
     } catch (e) {
       console.error(e);
-      showToast("원격 서버 연동 지연. 로컬 브라우저에 임시 백업됩니다.", "error");
+      showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalBtnText;
+      }
+    }
+  } else {
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = originalBtnText;
     }
   }
-
-  // 2. Fallback Local Mode
-  const allSubmissions = JSON.parse(localStorage.getItem("soro_submissions") || "[]");
-  allSubmissions.push(newEntry);
-  localStorage.setItem("soro_submissions", JSON.stringify(allSubmissions));
-
-  showToast(`${activeContest.title} 대회의 작품 접수가 성공적으로 완료되었습니다! 🎨`, "success");
-  closeContestDrawer();
-  updateLiveCounters();
 }
 
 // ====================================================
@@ -4624,7 +4569,6 @@ async function executeLoggedInLookup() {
 
   let mySubmissions = [];
 
-  // 1. Remote DB Cloud Mode
   if (GOOGLE_SHEET_API_URL) {
     const payload = {
       action: "getSubmissions",
@@ -4639,6 +4583,7 @@ async function executeLoggedInLookup() {
       const result = await response.json();
       if (result.status === "success") {
         mySubmissions = result.data;
+        
         // Clean up localStorage for this student: if a non-draft submission is not in the remote list, remove it
         const remoteIds = new Set(mySubmissions.map(s => s.id));
         const allSubmissions = JSON.parse(localStorage.getItem("soro_submissions") || "[]");
@@ -4648,20 +4593,17 @@ async function executeLoggedInLookup() {
           return remoteIds.has(entry.id);
         });
         localStorage.setItem("soro_submissions", JSON.stringify(cleanedSubmissions));
+      } else {
+        showToast(result.message || "데이터를 불러오는 중 오류가 발생했습니다.", "error");
       }
     } catch (e) {
       console.error(e);
-      showToast("원격 서버 데이터 수신 실패. 로컬 백업을 조회합니다.", "error");
+      showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
       GOOGLE_SHEET_API_URL_error = true;
     }
-  }
-
-  // 2. Fallback Local Mode
-  if (!GOOGLE_SHEET_API_URL || mySubmissions.length === 0) {
-    const allSubmissions = JSON.parse(localStorage.getItem("soro_submissions") || "[]");
-    mySubmissions = allSubmissions.filter(entry =>
-      entry.studentUsername.toLowerCase() === currentUser.userKey.toLowerCase()
-    );
+  } else {
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+    GOOGLE_SHEET_API_URL_error = true;
   }
 
   // 임시저장 본은 제출 목록 리스트에서 제외
@@ -4873,8 +4815,6 @@ async function executeLoggedInLookup() {
 // Global deletion call (Supports Remote/Local)
 window.confirmDeleteEntry = async function (entryId) {
   if (confirm("정말 이 작품의 접수를 취소하고 삭제하시겠습니까? 한 번 지워진 접수 데이터는 복구할 수 없습니다.")) {
-
-    // 1. Remote DB Cloud Mode
     if (GOOGLE_SHEET_API_URL) {
       showToast("클라우드에서 접수를 파기하고 있습니다...", "info");
       const payload = {
@@ -4893,46 +4833,35 @@ window.confirmDeleteEntry = async function (entryId) {
           showToast(result.message, "error");
           return;
         }
+
+        const element = document.getElementById(`entry-${entryId}`);
+        if (element) {
+          element.style.transition = "all 0.3s ease";
+          element.style.opacity = "0";
+          element.style.transform = "translateY(15px)";
+          setTimeout(() => {
+            element.remove();
+
+            const container = document.getElementById("results-container");
+            if (container.children.length === 0) {
+              container.innerHTML = `
+                <div class="empty-results">
+                  ✨ 모든 접수 취소가 처리되었습니다.
+                </div>
+              `;
+            }
+          }, 300);
+        }
+
+        showToast("작품 접수 정보가 성공적으로 취소 및 삭제 처리되었습니다.", "success");
+        updateLiveCounters();
       } catch (e) {
         console.error(e);
-        showToast("원격 서버 통신 지연. 로컬 삭제를 실행합니다.", "error");
+        showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
       }
-    }
-
-    // 2. Fallback Local Mode
-    const allSubmissions = JSON.parse(localStorage.getItem("soro_submissions") || "[]");
-    const target = allSubmissions.find(entry => entry.id === entryId);
-    let updatedSubmissions;
-    if (target) {
-      updatedSubmissions = allSubmissions.filter(entry => 
-        !(entry.studentUsername.toLowerCase() === target.studentUsername.toLowerCase() && entry.contestId === target.contestId)
-      );
     } else {
-      updatedSubmissions = allSubmissions.filter(entry => entry.id !== entryId);
+      showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
     }
-    localStorage.setItem("soro_submissions", JSON.stringify(updatedSubmissions));
-
-    const element = document.getElementById(`entry-${entryId}`);
-    if (element) {
-      element.style.transition = "all 0.3s ease";
-      element.style.opacity = "0";
-      element.style.transform = "translateY(15px)";
-      setTimeout(() => {
-        element.remove();
-
-        const container = document.getElementById("results-container");
-        if (container.children.length === 0) {
-          container.innerHTML = `
-            <div class="empty-results">
-              ✨ 모든 접수 취소가 처리되었습니다.
-            </div>
-          `;
-        }
-      }, 300);
-    }
-
-    showToast("작품 접수 정보가 성공적으로 취소 및 삭제 처리되었습니다.", "success");
-    updateLiveCounters();
   }
 };
 
@@ -5081,6 +5010,7 @@ function initAdminPanel() {
   if (searchInput) {
     searchInput.addEventListener("input", (e) => {
       adminSearchQuery = e.target.value.trim().toLowerCase();
+      adminGalleryCurrentLimit = 24;
       renderAdminSubmissionsTable();
     });
   }
@@ -5093,6 +5023,7 @@ function initAdminPanel() {
         starFilters.querySelectorAll(".admin-filter-chip").forEach(c => c.classList.remove("active"));
         e.target.classList.add("active");
         adminStarFilter = e.target.dataset.filter;
+        adminGalleryCurrentLimit = 24;
         renderAdminSubmissionsTable();
       });
     });
@@ -5106,6 +5037,7 @@ function initAdminPanel() {
         prizeFilters.querySelectorAll(".admin-filter-chip").forEach(c => c.classList.remove("active"));
         e.target.classList.add("active");
         adminPrizeFilter = e.target.dataset.filter;
+        adminGalleryCurrentLimit = 24;
         renderAdminSubmissionsTable();
       });
     });
@@ -5121,6 +5053,7 @@ function initAdminPanel() {
         
         adminCurrentGradeFilter = e.target.dataset.grade;
         adminCurrentClassOnlyFilter = "all";
+        adminGalleryCurrentLimit = 24;
         
         renderAdminClassSelector();
         renderAdminSubmissionsTable();
@@ -5158,7 +5091,7 @@ function openAdminDrawer() {
     
     renderAdminClassSelector();
     initAdminCollapsiblePanel();
-    fetchAndRenderAdminData();
+    setAdminTabMode(adminCurrentTabMode || "contest");
   }
 }
 
@@ -5193,6 +5126,7 @@ function renderAdminClassSelector() {
       container.querySelectorAll(".admin-capsule").forEach(c => c.classList.remove("active"));
       e.target.classList.add("active");
       adminCurrentClassOnlyFilter = e.target.dataset.class;
+      adminGalleryCurrentLimit = 24;
       renderAdminSubmissionsTable();
     });
   });
@@ -5207,7 +5141,6 @@ function renderAdminKPIs() {
   const metricsContainer = document.getElementById("admin-grade-metrics-container");
   
   const deduped = deduplicateSubmissions(adminAllSubmissions);
-  const stars = JSON.parse(localStorage.getItem("soro_admin_stars") || "{}");
   
   // Update numbers
   if (totalEl) totalEl.textContent = adminAllSubmissions.length;
@@ -5215,7 +5148,7 @@ function renderAdminKPIs() {
   
   let starredCount = 0;
   deduped.forEach(entry => {
-    if (stars[entry.id]) starredCount++;
+    if (entry.data && entry.data.isStarred) starredCount++;
   });
   if (starredEl) starredEl.textContent = starredCount;
 
@@ -5250,7 +5183,7 @@ function renderAdminKPIs() {
       const count = gradeCounts[g];
       const pct = Math.round((count / maxCount) * 100);
       html += `
-        <div class="admin-grade-bar-item">
+        <div class="admin-grade-bar-item" onclick="selectAdminGradeFilter(${g})" style="cursor: pointer;">
           <div class="admin-grade-bar-label">
             <span>${g}학년</span>
             <span>${count}명 (${pct}%)</span>
@@ -5267,16 +5200,16 @@ function renderAdminKPIs() {
 
 // 4-1. Collapsible Panel State Initializer
 function initAdminCollapsiblePanel() {
-  const isCollapsed = localStorage.getItem("soro_admin_panel_collapsed") === "true";
+  const isCollapsed = localStorage.getItem("soro_admin_panel_collapsed") !== "false";
   const grid = document.getElementById("admin-contest-cards");
   const btn = document.getElementById("admin-panel-toggle-btn");
   if (grid && btn) {
     if (isCollapsed) {
       grid.classList.add("collapsed");
-      btn.textContent = "펼치기 🔽";
+      btn.classList.remove("active");
     } else {
       grid.classList.remove("collapsed");
-      btn.textContent = "접기 🔼";
+      btn.classList.add("active");
     }
   }
 }
@@ -5289,11 +5222,60 @@ window.toggleAdminContestPanel = function() {
 
   const isCollapsed = grid.classList.toggle("collapsed");
   localStorage.setItem("soro_admin_panel_collapsed", isCollapsed ? "true" : "false");
-  btn.textContent = isCollapsed ? "펼기 🔽" : "접기 🔼";
+  btn.classList.toggle("active", !isCollapsed);
+};
+
+// Toggle Accordion for Admin Filter Bar (Grade/Class Selector)
+window.toggleAdminFilterAccordion = function() {
+  const accordion = document.getElementById("admin-detail-filters-accordion");
+  const btn = document.getElementById("admin-filter-accordion-btn");
+  if (!accordion || !btn) return;
+
+  const isCollapsed = accordion.classList.toggle("collapsed");
+  btn.textContent = isCollapsed ? "🔍 상세필터 🔽" : "🔍 상세필터 🔼";
+  btn.classList.toggle("active", !isCollapsed);
+};
+
+// Sidebar grade metrics selection handler (Syncs with filters accordion)
+window.selectAdminGradeFilter = function(grade) {
+  const accordion = document.getElementById("admin-detail-filters-accordion");
+  const accordionBtn = document.getElementById("admin-filter-accordion-btn");
+  if (accordion) {
+    accordion.classList.remove("collapsed");
+  }
+  if (accordionBtn) {
+    accordionBtn.classList.add("active");
+    accordionBtn.textContent = "🔍 상세필터 🔼";
+  }
+
+  const gradeSelector = document.getElementById("admin-grade-selector");
+  if (gradeSelector) {
+    gradeSelector.querySelectorAll(".admin-capsule").forEach(c => {
+      if (c.dataset.grade === String(grade)) {
+        c.classList.add("active");
+      } else {
+        c.classList.remove("active");
+      }
+    });
+  }
+
+  adminCurrentGradeFilter = String(grade);
+  adminCurrentClassOnlyFilter = "all";
+
+  renderAdminClassSelector();
+  
+  if (adminCurrentViewMode === "gallery") {
+    renderAdminSubmissionsGallery();
+  } else {
+    renderAdminSubmissionsTable();
+  }
+  
+  showToast(`${grade}학년 필터가 적용되었습니다.`, "info");
 };
 
 // 4-3. View Mode Switcher (Table vs Gallery)
 let adminCurrentViewMode = "gallery";
+let adminGalleryCurrentLimit = 24;
 window.setAdminViewMode = function(mode) {
   adminCurrentViewMode = mode;
   const tableView = document.getElementById("admin-table-view-wrapper");
@@ -5318,6 +5300,11 @@ window.setAdminViewMode = function(mode) {
 
 // 5. Fetch All Submissions (Bulk & Fallback Hybrid Acceleration)
 async function fetchAndRenderAdminData() {
+  if (typeof adminCurrentTabMode !== "undefined" && adminCurrentTabMode === "zepquiz") {
+    fetchZepQuizDataAndRender();
+    return;
+  }
+
   const galleryList = document.getElementById("admin-gallery-list");
   if (!galleryList) return;
 
@@ -5351,7 +5338,7 @@ async function fetchAndRenderAdminData() {
         body: JSON.stringify({ action: "getAllSubmissions", contestId: "all" })
       });
       const result = await response.json();
-      if (result.status === "success" && Array.isArray(result.data) && result.data.length > 0) {
+      if (result.status === "success" && Array.isArray(result.data)) {
         adminAllSubmissions = result.data;
         isBulkSuccess = true;
         console.log(`[Bulk Fetch] Successfully loaded ${adminAllSubmissions.length} entries.`);
@@ -5384,30 +5371,15 @@ async function fetchAndRenderAdminData() {
       adminAllSubmissions = results.flat();
     }
     
-    let fallbackUsed = false;
-    if (adminAllSubmissions.length === 0) {
-      const localBackups = JSON.parse(localStorage.getItem("soro_submissions") || "[]");
-      adminAllSubmissions = localBackups.filter(s => activeContestIds.includes(s.contestId));
-      fallbackUsed = true;
-    }
-    
-    const localPrizes = JSON.parse(localStorage.getItem("soro_admin_prizes") || "{}");
     adminAllSubmissions.forEach(entry => {
       if (entry && entry.data && typeof entry.data === "string") {
         try { entry.data = JSON.parse(entry.data); } catch (e) { entry.data = {}; }
       } else if (entry && !entry.data) {
         entry.data = {};
       }
-      if (entry && entry.data && !entry.data.prizeStatus && localPrizes[entry.id]) {
-        entry.data.prizeStatus = localPrizes[entry.id];
-      }
     });
 
-    if (fallbackUsed) {
-      showToast("원격 서버 연결 지연 → 로컬 백업으로 데이터를 긴급 전환했습니다.", "warning");
-    } else {
-      showToast(isBulkSuccess ? "원격 동기화 가속 완료 (1회 일괄 조회 성공)!" : "원격 동기화 완료 (구버전 호환 우회 적용)", "success");
-    }
+    showToast(isBulkSuccess ? "원격 동기화 가속 완료 (1회 일괄 조회 성공)!" : "원격 동기화 완료 (구버전 호환 우회 적용)", "success");
     
     renderAdminKPIs();
     renderAdminContestCards();
@@ -5420,17 +5392,10 @@ async function fetchAndRenderAdminData() {
     }
   } catch (globalErr) {
     console.error("Global admin fetch error:", globalErr);
-    adminAllSubmissions = localBackups.filter(s => activeContestIds.includes(s.contestId));
-    const localPrizesFallback = JSON.parse(localStorage.getItem("soro_admin_prizes") || "{}");
-    adminAllSubmissions.forEach(entry => {
-      if (entry && entry.data && typeof entry.data === "string") {
-        try { entry.data = JSON.parse(entry.data); } catch (e) { entry.data = {}; }
-      } else if (entry && !entry.data) { entry.data = {}; }
-      if (entry && entry.data && !entry.data.prizeStatus && localPrizesFallback[entry.id]) {
-        entry.data.prizeStatus = localPrizesFallback[entry.id];
-      }
-    });
-    showToast("네트워크 연결 불안정 → 로컬 백업으로 화면을 구성했습니다.", "warning");
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+    
+    // Reset to empty
+    adminAllSubmissions = [];
     renderAdminKPIs();
     renderAdminContestCards();
     
@@ -5465,7 +5430,7 @@ function renderAdminContestCards() {
   const container = document.getElementById("admin-contest-cards");
   if (!container) return;
 
-  const locks = JSON.parse(localStorage.getItem("soro_contest_locks") || "{}");
+  const locks = contestLocks;
   const deduped = deduplicateSubmissions(adminAllSubmissions);
   const contestEmojis = { keyring: "🔑", cuttoon: "📰", library: "📚", transcription: "✍️", pixelart: "🎮", sound_album: "🎵" };
   
@@ -5537,11 +5502,39 @@ function renderAdminContestCards() {
 }
 
 // 8. Toggle Contest Lock (Manual Locking)
-window.toggleContestLock = function(cId) {
-  const locks = JSON.parse(localStorage.getItem("soro_contest_locks") || "{}");
-  locks[cId] = !locks[cId];
-  localStorage.setItem("soro_contest_locks", JSON.stringify(locks));
+window.toggleContestLock = async function(cId) {
+  const nextStatus = !contestLocks[cId];
+  showToast("접수 상태 변경 중...", "info");
   
+  if (GOOGLE_SHEET_API_URL) {
+    try {
+      const response = await fetch(GOOGLE_SHEET_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: JSON.stringify({
+          action: "updateContestLock",
+          contestId: cId,
+          isLocked: nextStatus
+        })
+      });
+      const result = await response.json();
+      if (result.status === "success") {
+        contestLocks[cId] = nextStatus;
+        showToast("공모전 접수 제어 상태가 실시간 연계 변경되었습니다.", "success");
+      } else {
+        showToast("제어 상태 변경에 실패했습니다: " + result.message, "error");
+        return;
+      }
+    } catch (e) {
+      console.error(e);
+      showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+      return;
+    }
+  } else {
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+    return;
+  }
+
   // Refresh Admin Grid
   renderAdminContestCards();
   
@@ -5551,20 +5544,15 @@ window.toggleContestLock = function(cId) {
     renderAdminSubmissionsTable();
   }
   
-  // Real-time synchronization to student main page
   if (typeof renderContestGrid === "function") {
     renderContestGrid();
   }
-  
-  showToast(`공모전 접수 제어 상태가 실시간 연계 변경되었습니다.`, "success");
 };
 
 // 8-3. Render Data Gallery
 function renderAdminSubmissionsGallery() {
   const container = document.getElementById("admin-gallery-list");
   if (!container) return;
-
-  const stars = JSON.parse(localStorage.getItem("soro_admin_stars") || "{}");
 
   // Filter logic (same as Table View)
   let filtered = deduplicateSubmissions(adminAllSubmissions);
@@ -5595,7 +5583,7 @@ function renderAdminSubmissionsGallery() {
 
   // Star filter
   if (adminStarFilter === "starred") {
-    filtered = filtered.filter(entry => stars[entry.id]);
+    filtered = filtered.filter(entry => entry.data && entry.data.isStarred === true);
   }
 
   // Prize filter
@@ -5611,8 +5599,15 @@ function renderAdminSubmissionsGallery() {
         조건에 맞는 제출 작품이 없습니다.
       </div>
     `;
+    
+    // Clean up "load more" button if any
+    const existingMore = document.getElementById("admin-gallery-more-btn-wrapper");
+    if (existingMore) existingMore.remove();
     return;
   }
+
+  const totalCount = filtered.length;
+  filtered = filtered.slice(0, adminGalleryCurrentLimit);
 
   const contestEmojis = { keyring: "🔑", cuttoon: "📰", library: "📚", transcription: "✍️", pixelart: "🎮", sound_album: "🎵" };
   const contestColors = {
@@ -5626,7 +5621,7 @@ function renderAdminSubmissionsGallery() {
 
   let html = "";
   filtered.forEach(entry => {
-    const isStarred = !!stars[entry.id];
+    const isStarred = entry.data && entry.data.isStarred === true;
     const color = contestColors[entry.contestId] || "#ffffff";
     const emoji = contestEmojis[entry.contestId] || "🎨";
     
@@ -5708,53 +5703,122 @@ function renderAdminSubmissionsGallery() {
   });
 
   container.innerHTML = html;
+
+  // 더보기 버튼 제어
+  const wrapper = document.getElementById("admin-gallery-view-wrapper");
+  if (wrapper) {
+    const existingMore = document.getElementById("admin-gallery-more-btn-wrapper");
+    if (existingMore) existingMore.remove();
+
+    if (totalCount > adminGalleryCurrentLimit) {
+      const moreBtnWrapper = document.createElement("div");
+      moreBtnWrapper.id = "admin-gallery-more-btn-wrapper";
+      moreBtnWrapper.style.display = "flex";
+      moreBtnWrapper.style.justifyContent = "center";
+      moreBtnWrapper.style.padding = "20px 0";
+      moreBtnWrapper.innerHTML = `
+        <button class="btn btn-secondary" onclick="loadMoreAdminGallery()" style="display: flex; align-items: center; gap: 6px; font-weight: 800; cursor: pointer; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: white;">
+          더보기 ➕ (${filtered.length} / ${totalCount}개 노출 중)
+        </button>
+      `;
+      wrapper.appendChild(moreBtnWrapper);
+    }
+  }
 }
 
+// 더보기 로드 함수
+window.loadMoreAdminGallery = function() {
+  adminGalleryCurrentLimit += 24;
+  renderAdminSubmissionsGallery();
+};
+
 // 9. Toggle Star Marking
-window.toggleAdminStar = function(submissionId) {
-  const stars = JSON.parse(localStorage.getItem("soro_admin_stars") || "{}");
-  if (stars[submissionId]) {
-    delete stars[submissionId];
+window.toggleAdminStar = async function(submissionId) {
+  const entry = adminAllSubmissions.find(s => s.id === submissionId);
+  if (!entry) return;
+
+  if (!entry.data) entry.data = {};
+  const nextStarred = !entry.data.isStarred;
+
+  showToast("별표 상태 업데이트 중...", "info");
+
+  if (GOOGLE_SHEET_API_URL) {
+    try {
+      const response = await fetch(GOOGLE_SHEET_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: JSON.stringify({
+          action: "updateSubmissionStarStatus",
+          id: submissionId,
+          isStarred: nextStarred
+        })
+      });
+      const result = await response.json();
+      if (result.status === "success") {
+        entry.data.isStarred = nextStarred;
+        showToast("별표 상태가 업데이트되었습니다.", "success");
+      } else {
+        showToast("별표 업데이트 실패: " + result.message, "error");
+        return;
+      }
+    } catch (e) {
+      console.error(e);
+      showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+      return;
+    }
   } else {
-    stars[submissionId] = true;
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+    return;
   }
-  localStorage.setItem("soro_admin_stars", JSON.stringify(stars));
+
   renderAdminKPIs(); // Refresh sidebar count
-  renderAdminSubmissionsTable();
+  if (adminCurrentViewMode === "gallery") {
+    renderAdminSubmissionsGallery();
+  } else {
+    renderAdminSubmissionsTable();
+  }
 };
 
 // 9-2. Toggle Prize Delivered Marking
-window.toggleAdminPrize = function(submissionId) {
+window.toggleAdminPrize = async function(submissionId) {
   const entry = adminAllSubmissions.find(s => s.id === submissionId);
   if (!entry) return;
 
   if (!entry.data) entry.data = {};
   const currentStatus = entry.data.prizeStatus === "delivered" ? "waiting" : "delivered";
   
-  // Update state locally first (Optimistic update)
-  entry.data.prizeStatus = currentStatus;
-  
-  // Also save in local storage fallback
-  const localPrizes = JSON.parse(localStorage.getItem("soro_admin_prizes") || "{}");
-  localPrizes[submissionId] = currentStatus;
-  localStorage.setItem("soro_admin_prizes", JSON.stringify(localPrizes));
+  showToast("사은품 상태 업데이트 중...", "info");
 
-  // Also update the backup in soro_submissions local storage if it exists there
-  const allSubmissions = JSON.parse(localStorage.getItem("soro_submissions") || "[]");
-  const localIndex = allSubmissions.findIndex(s => s.id === submissionId);
-  if (localIndex !== -1) {
-    const localEntry = allSubmissions[localIndex];
-    let localData = {};
+  if (GOOGLE_SHEET_API_URL) {
+    const payload = {
+      action: "updateSubmissionPrizeStatus",
+      id: submissionId,
+      prizeStatus: currentStatus
+    };
     try {
-      localData = typeof localEntry.data === "string" ? JSON.parse(localEntry.data) : (localEntry.data || {});
-    } catch (e) {}
-    localData.prizeStatus = currentStatus;
-    localEntry.data = typeof localEntry.data === "string" ? JSON.stringify(localData) : localData;
-    allSubmissions[localIndex] = localEntry;
-    localStorage.setItem("soro_submissions", JSON.stringify(allSubmissions));
+      const response = await fetch(GOOGLE_SHEET_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: JSON.stringify(payload)
+      });
+      const result = await response.json();
+      if (result.status === "success") {
+        entry.data.prizeStatus = currentStatus;
+        showToast("사은품 지급 상태가 업데이트되었습니다.", "success");
+      } else {
+        showToast("업데이트 실패: " + result.message, "error");
+        return;
+      }
+    } catch (err) {
+      console.error("API prize update network error:", err);
+      showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+      return;
+    }
+  } else {
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+    return;
   }
 
-  // 즉시 UI 갱신 및 애니메이션 구동 (0ms 반응성 확보)
   const cardEl = document.querySelector(`.admin-gallery-card[data-id="${submissionId}"]`);
   if (cardEl) {
     const btn = cardEl.querySelector(".prize-btn");
@@ -5765,29 +5829,6 @@ window.toggleAdminPrize = function(submissionId) {
   }
   renderAdminKPIs();
   renderAdminSubmissionsGallery();
-
-  // Try to update on the remote DB if API is available (비동기 비동작 전송 - Non-blocking)
-  if (GOOGLE_SHEET_API_URL) {
-    const payload = {
-      action: "updateSubmissionPrizeStatus",
-      id: submissionId,
-      prizeStatus: currentStatus
-    };
-    fetch(GOOGLE_SHEET_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: JSON.stringify(payload)
-    })
-    .then(response => response.json())
-    .then(result => {
-      if (result.status !== "success") {
-        console.warn("API prize update failed:", result.message);
-      }
-    })
-    .catch(err => {
-      console.warn("API prize update network error:", err);
-    });
-  }
 };
 
 // 10. Render Submissions (Redirect function to maintain API compatibility)
@@ -5797,8 +5838,6 @@ function renderAdminSubmissionsTable() {
 
 // 11. Export to CSV (Deduplicated, correct URLs, Base64 filter protection, 7 Columns)
 function exportSubmissionsToCSV() {
-  const stars = JSON.parse(localStorage.getItem("soro_admin_stars") || "{}");
-  
   let filtered = deduplicateSubmissions(adminAllSubmissions);
 
   // Contest filter
@@ -5816,7 +5855,7 @@ function exportSubmissionsToCSV() {
 
   // Star filter
   if (adminStarFilter === "starred") {
-    filtered = filtered.filter(entry => !!stars[entry.id]);
+    filtered = filtered.filter(entry => entry.data && entry.data.isStarred === true);
   }
 
   // Prize filter
@@ -5928,48 +5967,484 @@ window.deleteSubmissionByAdmin = async function(id, contestId) {
 
   if (GOOGLE_SHEET_API_URL) {
     try {
-      await fetch(GOOGLE_SHEET_API_URL, {
+      const response = await fetch(GOOGLE_SHEET_API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: JSON.stringify({ action: "deleteSubmission", id: id })
       });
+      const result = await response.json();
+
+      if (result.status === "error") {
+        showToast(result.message, "error");
+        return;
+      }
+
+      // Remove from memory array
+      const targetEntry = adminAllSubmissions.find(s => s.id === id);
+      if (targetEntry) {
+        const username = targetEntry.studentUsername;
+        const cId = targetEntry.contestId;
+        
+        // Remove all submissions by this student for this contest
+        adminAllSubmissions = adminAllSubmissions.filter(s => 
+          !(s.studentUsername.toLowerCase() === username.toLowerCase() && s.contestId === cId)
+        );
+      } else {
+        // Fallback: remove only by ID
+        adminAllSubmissions = adminAllSubmissions.filter(s => s.id !== id);
+      }
+
+
+
+      renderAdminKPIs(); // Refresh stats
+      renderAdminContestCards();
+      renderAdminSubmissionsTable();
+      showToast("출품작이 영구 삭제되었습니다.", "success");
+
     } catch (err) {
       console.error("Remote delete failed:", err);
+      showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
     }
-  }
-
-  // Remove from local array
-  const targetEntry = adminAllSubmissions.find(s => s.id === id);
-  if (targetEntry) {
-    const username = targetEntry.studentUsername;
-    const contestId = targetEntry.contestId;
-    
-    // Remove all submissions by this student for this contest
-    adminAllSubmissions = adminAllSubmissions.filter(s => 
-      !(s.studentUsername.toLowerCase() === username.toLowerCase() && s.contestId === contestId)
-    );
-    const localSubs = JSON.parse(localStorage.getItem("soro_submissions") || "[]");
-    localStorage.setItem("soro_submissions", JSON.stringify(localSubs.filter(s => 
-      !(s.studentUsername.toLowerCase() === username.toLowerCase() && s.contestId === contestId)
-    )));
   } else {
-    // Fallback: remove only by ID
-    adminAllSubmissions = adminAllSubmissions.filter(s => s.id !== id);
-    const localSubs = JSON.parse(localStorage.getItem("soro_submissions") || "[]");
-    localStorage.setItem("soro_submissions", JSON.stringify(localSubs.filter(s => s.id !== id)));
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
   }
-
-  // Remove star if exists
-  const stars = JSON.parse(localStorage.getItem("soro_admin_stars") || "{}");
-  delete stars[id];
-  localStorage.setItem("soro_admin_stars", JSON.stringify(stars));
-
-  renderAdminKPIs(); // Refresh stats
-  renderAdminContestCards();
-  renderAdminSubmissionsTable();
-  showToast("출품작이 영구 삭제되었습니다.", "success");
 };
 
+// 젭퀴즈 대시보드 전역 상태 변수
+let adminCurrentTabMode = "contest"; // "contest" | "zepquiz"
+let zepQuizClassesData = null; // 원격에서 가져온 젭퀴즈 데이터 저장용
+let currentDrilldownClassKey = null;
+
+// 듀얼 모드 탭 전환 함수
+window.setAdminTabMode = function(mode) {
+  adminCurrentTabMode = mode;
+  
+  const tabContest = document.getElementById("btn-tab-contest");
+  const tabZepQuiz = document.getElementById("btn-tab-zepquiz");
+  
+  const kpiContest = document.getElementById("admin-contest-kpi-section");
+  const kpiZepQuiz = document.getElementById("admin-zepquiz-kpi-section");
+  
+  const metricsContest = document.getElementById("admin-contest-grade-metrics");
+  const metricsZepQuiz = document.getElementById("admin-zepquiz-grade-metrics");
+  
+  const mainContest = document.getElementById("admin-contest-main-area");
+  const mainZepQuiz = document.getElementById("admin-zepquiz-main-area");
+  
+  // 탭 버튼 active 스타일 전환
+  if (mode === "contest") {
+    if (tabContest) {
+      tabContest.classList.add("active");
+      tabContest.style.color = "white";
+    }
+    if (tabZepQuiz) {
+      tabZepQuiz.classList.remove("active");
+      tabZepQuiz.style.color = "#808088";
+    }
+    
+    if (kpiContest) kpiContest.style.display = "block";
+    if (kpiZepQuiz) kpiZepQuiz.style.display = "none";
+    
+    if (metricsContest) metricsContest.style.display = "block";
+    if (metricsZepQuiz) metricsZepQuiz.style.display = "none";
+    
+    if (mainContest) mainContest.style.display = "block";
+    if (mainZepQuiz) mainZepQuiz.style.display = "none";
+    
+    // 테마 속성 해제
+    document.body.removeAttribute("data-admin-mode");
+    
+    // 기존 공모전 데이터 렌더링
+    renderAdminKPIs();
+    renderAdminContestCards();
+    if (adminCurrentViewMode === "gallery") {
+      renderAdminSubmissionsGallery();
+    } else {
+      renderAdminSubmissionsTable();
+    }
+  } else {
+    if (tabContest) {
+      tabContest.classList.remove("active");
+      tabContest.style.color = "#808088";
+    }
+    if (tabZepQuiz) {
+      tabZepQuiz.classList.add("active");
+      tabZepQuiz.style.color = "white";
+    }
+    
+    if (kpiContest) kpiContest.style.display = "none";
+    if (kpiZepQuiz) kpiZepQuiz.style.display = "block";
+    
+    if (metricsContest) metricsContest.style.display = "none";
+    if (metricsZepQuiz) metricsZepQuiz.style.display = "block";
+    
+    if (mainContest) mainContest.style.display = "none";
+    if (mainZepQuiz) mainZepQuiz.style.display = "block";
+    
+    // 젭퀴즈 테마 속성 설정
+    document.body.setAttribute("data-admin-mode", "zepquiz");
+    
+    // 젭퀴즈 데이터 로드 및 렌더링
+    fetchZepQuizDataAndRender();
+  }
+};
+
+// 젭퀴즈 데이터 로드 및 렌더러
+async function fetchZepQuizDataAndRender() {
+  const classGrid = document.getElementById("admin-zep-class-grid");
+  if (!classGrid) return;
+  
+  classGrid.innerHTML = `
+    <div style="grid-column: 1 / -1; text-align: center; padding: 50px; color: var(--text-secondary);">
+      <div class="spinner" style="margin: 0 auto 12px auto;"></div>
+      <p style="font-weight: 800; color: var(--text-primary);">원격 젭퀴즈 달성 데이터를 수집하는 중...</p>
+    </div>
+  `;
+  
+  closeZepDrilldown();
+  
+  if (!GOOGLE_SHEET_API_URL) {
+    classGrid.innerHTML = `
+      <div style="grid-column: 1 / -1; text-align: center; padding: 30px; color: var(--error-color); font-weight: 800;">
+        ⚠️ 원격 API 주소가 설정되지 않았습니다.
+      </div>
+    `;
+    return;
+  }
+  
+  try {
+    const response = await fetch(GOOGLE_SHEET_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: JSON.stringify({ action: "getZepQuizStats", roundId: "zepquiz" })
+    });
+    
+    const result = await response.json();
+    if (result.status === "success" && result.classes) {
+      zepQuizClassesData = result.classes;
+      renderZepQuizKPIs();
+      renderZepQuizGradeMetrics();
+      renderZepQuizClassGrid();
+      showToast("젭퀴즈 현황 원격 동기화 완료!", "success");
+    } else {
+      classGrid.innerHTML = `
+        <div style="grid-column: 1 / -1; text-align: center; padding: 30px; color: var(--error-color); font-weight: 800;">
+          ⚠️ 데이터 수집 실패: ${result.message || "알 수 없는 에러"}
+        </div>
+      `;
+    }
+  } catch (err) {
+    console.error("fetchZepQuizDataAndRender error:", err);
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+    classGrid.innerHTML = `
+      <div style="grid-column: 1 / -1; text-align: center; padding: 30px; color: var(--error-color); font-weight: 800;">
+        ⚠️ 네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.
+      </div>
+    `;
+  }
+}
+
+function renderZepQuizKPIs() {
+  if (!zepQuizClassesData) return;
+  
+  let totalSubmitted = 0;
+  let totalStudents = 0;
+  let completedClassesCount = 0;
+  let totalClassesCount = 0;
+  let deliveredCookiesClassesCount = 0;
+  
+  for (const classKey in zepQuizClassesData) {
+    const cls = zepQuizClassesData[classKey];
+    totalSubmitted += cls.completedCount;
+    totalStudents += cls.totalStudents;
+    totalClassesCount++;
+    
+    if (cls.totalStudents > 0 && cls.completedCount === cls.totalStudents) {
+      completedClassesCount++;
+    }
+    
+    if (cls.prizeStatus === "delivered") {
+      deliveredCookiesClassesCount++;
+    }
+  }
+  
+  const pct = totalStudents > 0 ? Math.round((totalSubmitted / totalStudents) * 100) : 0;
+  
+  const totalEl = document.getElementById("admin-zep-stat-total");
+  const ratioEl = document.getElementById("admin-zep-stat-ratio");
+  const classesEl = document.getElementById("admin-zep-stat-classes");
+  const cookiesEl = document.getElementById("admin-zep-stat-cookies");
+  
+  if (totalEl) totalEl.textContent = totalSubmitted;
+  if (ratioEl) ratioEl.textContent = pct + "%";
+  if (classesEl) classesEl.textContent = `${completedClassesCount}/${totalClassesCount}`;
+  if (cookiesEl) cookiesEl.textContent = deliveredCookiesClassesCount;
+}
+
+function renderZepQuizGradeMetrics() {
+  const container = document.getElementById("admin-zep-grade-metrics-container");
+  if (!container || !zepQuizClassesData) return;
+  
+  const grades = [3, 4, 5, 6];
+  let gradeSubmitted = { 3: 0, 4: 0, 5: 0, 6: 0 };
+  let gradeStudents = { 3: 0, 4: 0, 5: 0, 6: 0 };
+  
+  for (const classKey in zepQuizClassesData) {
+    const cls = zepQuizClassesData[classKey];
+    const g = cls.grade;
+    if (grades.includes(g)) {
+      gradeSubmitted[g] += cls.completedCount;
+      gradeStudents[g] += cls.totalStudents;
+    }
+  }
+  
+  let html = "";
+  grades.forEach(g => {
+    const sub = gradeSubmitted[g];
+    const tot = gradeStudents[g];
+    const pct = tot > 0 ? Math.round((sub / tot) * 100) : 0;
+    
+    html += `
+      <div class="admin-grade-bar-item" style="cursor: default;">
+        <div class="admin-grade-bar-label">
+          <span>${g}학년</span>
+          <span>${sub}/${tot}명 (${pct}%)</span>
+        </div>
+        <div class="admin-grade-bar-track" style="background: rgba(245, 158, 11, 0.15);">
+          <div class="admin-grade-bar-fill" style="width: ${pct}%; background: linear-gradient(90deg, #f59e0b, #d97706);"></div>
+        </div>
+      </div>
+    `;
+  });
+  
+  container.innerHTML = html;
+}
+
+function renderZepQuizClassGrid() {
+  const classGrid = document.getElementById("admin-zep-class-grid");
+  if (!classGrid || !zepQuizClassesData) return;
+  
+  let html = "";
+  const sortedKeys = Object.keys(zepQuizClassesData).sort((a, b) => {
+    const [aG, aC] = a.split("-").map(Number);
+    const [bG, bC] = b.split("-").map(Number);
+    if (aG !== bG) return aG - bG;
+    return aC - bC;
+  });
+  
+  sortedKeys.forEach(classKey => {
+    const cls = zepQuizClassesData[classKey];
+    const is100Pct = cls.totalStudents > 0 && cls.completedCount === cls.totalStudents;
+    const isPrizeDelivered = cls.prizeStatus === "delivered";
+    const pct = cls.totalStudents > 0 ? Math.round((cls.completedCount / cls.totalStudents) * 100) : 0;
+    
+    const cookieBtnClass = is100Pct ? "zep-cookie-btn active" : "zep-cookie-btn disabled";
+    const cookieText = isPrizeDelivered ? "🍪 지급완료" : "🍪 지급하기";
+    
+    const cardBorderColor = isPrizeDelivered 
+      ? "border: 1px solid rgba(236, 72, 153, 0.4); box-shadow: 0 4px 16px rgba(236, 72, 153, 0.08);" 
+      : (is100Pct ? "border: 1px solid rgba(16, 185, 129, 0.4); box-shadow: 0 4px 16px rgba(16, 185, 129, 0.08);" : "");
+      
+    html += `
+      <div class="admin-zep-class-card" onclick="openZepDrilldown('${cls.grade}', '${cls.classNum}')" style="${cardBorderColor}">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <h3 style="margin: 0; font-size: 0.95rem; font-weight: 800; color: white;">${cls.grade}학년 ${cls.classNum}반</h3>
+          <span style="font-size: 0.72rem; color: #a0a0aa; font-weight: 700;">
+            ${cls.completedCount}/${cls.totalStudents}명 (${pct}%)
+          </span>
+        </div>
+        
+        <div class="zepquiz-gauge-track" style="margin-bottom: 16px;">
+          <div class="zepquiz-gauge-fill" style="width: ${pct}%;"></div>
+        </div>
+        
+        <div style="display: flex; justify-content: flex-end;">
+          <button class="${cookieBtnClass} ${isPrizeDelivered ? 'delivered' : ''}" 
+                  onclick="event.stopPropagation(); toggleZepClassCookie('${cls.grade}', '${cls.classNum}')" 
+                  ${!is100Pct ? 'disabled' : ''}>
+            ${cookieText}
+          </button>
+        </div>
+      </div>
+    `;
+  });
+  
+  classGrid.innerHTML = html;
+}
+
+window.openZepDrilldown = function(grade, classNum) {
+  const drilldownArea = document.getElementById("admin-zep-drilldown-area");
+  const drilldownTitle = document.getElementById("admin-zep-drilldown-title");
+  const drilldownList = document.getElementById("admin-zep-drilldown-list");
+  
+  if (!drilldownArea || !drilldownTitle || !drilldownList || !zepQuizClassesData) return;
+  
+  const classKey = `${grade}-${classNum}`;
+  currentDrilldownClassKey = classKey;
+  
+  const cls = zepQuizClassesData[classKey];
+  if (!cls) return;
+  
+  drilldownTitle.innerHTML = `
+    <span>🍪 ${grade}학년 ${classNum}반 상세 현황</span>
+    <span style="font-size: 0.72rem; color: #a0a0aa; font-weight: 600; margin-left: 8px;">
+      (완료 ${cls.completedCount}명 / 미완료 ${cls.totalStudents - cls.completedCount}명)
+    </span>
+  `;
+  
+  let html = "";
+  if (cls.students.length === 0) {
+    html = `
+      <div style="grid-column: 1 / -1; text-align: center; padding: 30px; color: var(--text-secondary);">
+        해당 반에 가입된 학생이 없습니다.
+      </div>
+    `;
+  } else {
+    cls.students.forEach(student => {
+      const completed = student.completed;
+      let imageUrl = student.image;
+      if (imageUrl && imageUrl.includes("drive.google.com")) {
+        imageUrl = getGoogleDriveDirectLink(imageUrl);
+      }
+      
+      let mediaHtml = "";
+      if (completed && imageUrl) {
+        mediaHtml = `
+          <div class="admin-zep-student-thumb-wrapper" onclick="event.stopPropagation(); openImageModal('${imageUrl}')" style="cursor: zoom-in; margin-top: 6px; width: 100%; height: 120px; overflow: hidden; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08);">
+            <img src="${imageUrl}" alt="인증샷" loading="lazy" style="width: 100%; height: 100%; object-fit: cover;">
+          </div>
+        `;
+      } else if (completed) {
+        mediaHtml = `
+          <div class="admin-zep-student-thumb-wrapper" style="display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.05); color: #808088; font-size: 0.65rem; border-radius: 6px; border: 1px dashed rgba(255,255,255,0.1); margin-top: 6px; width: 100%; height: 120px;">
+            이미지 없음
+          </div>
+        `;
+      }
+      
+      const badgeClass = completed ? "zep-badge completed" : "zep-badge missing";
+      const badgeText = completed ? "✅ 완료" : "❌ 미제출";
+      const timestampText = completed && student.timestamp ? student.timestamp.substring(5, 16) : "";
+      
+      const cardBg = completed ? "rgba(16, 185, 129, 0.03)" : "rgba(244, 63, 94, 0.02)";
+      const cardBorder = completed ? "rgba(16, 185, 129, 0.12)" : "rgba(244, 63, 94, 0.08)";
+      
+      html += `
+        <div class="admin-zep-student-card" style="background: ${cardBg}; border: 1px solid ${cardBorder}; padding: 12px; border-radius: 8px; display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: 800; color: white; font-size: 0.8rem;">
+              ${student.number}번 ${student.name}
+            </span>
+            <span class="${badgeClass}">${badgeText}</span>
+          </div>
+          
+          <div style="font-size: 0.68rem; color: #808088;">
+            아이디: ${student.username}
+          </div>
+          
+          ${mediaHtml}
+          
+          ${timestampText ? `
+            <div style="font-size: 0.62rem; color: #606066; text-align: right; margin-top: auto;">
+              제출: ${timestampText}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    });
+  }
+  
+  drilldownList.innerHTML = html;
+  drilldownArea.style.display = "block";
+  
+  drilldownArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
+window.closeZepDrilldown = function() {
+  const drilldownArea = document.getElementById("admin-zep-drilldown-area");
+  if (drilldownArea) {
+    drilldownArea.style.display = "none";
+  }
+  currentDrilldownClassKey = null;
+};
+
+window.toggleZepClassCookie = async function(grade, classNum) {
+  const classKey = `${grade}-${classNum}`;
+  if (!zepQuizClassesData || !zepQuizClassesData[classKey]) return;
+  
+  const cls = zepQuizClassesData[classKey];
+  const is100Pct = cls.totalStudents > 0 && cls.completedCount === cls.totalStudents;
+  if (!is100Pct) {
+    showToast("학급 인원 100% 완료 시에만 과자 지급 처리가 가능합니다.", "warning");
+    return;
+  }
+  
+  const currentStatus = cls.prizeStatus;
+  const nextStatus = currentStatus === "delivered" ? "waiting" : "delivered";
+  
+  showToast("학급 과자 지급 상태 업데이트 중...", "info");
+  
+  if (GOOGLE_SHEET_API_URL) {
+    try {
+      const response = await fetch(GOOGLE_SHEET_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: JSON.stringify({
+          action: "updateClassPrizeStatus",
+          roundId: "zepquiz",
+          classKey: classKey,
+          prizeStatus: nextStatus
+        })
+      });
+      
+      const result = await response.json();
+      if (result.status === "success") {
+        cls.prizeStatus = nextStatus;
+        showToast(`${grade}학년 ${classNum}반 과자 지급 상태가 업데이트되었습니다.`, "success");
+        
+        if (nextStatus === "delivered") {
+          spawnCookieParticles();
+        }
+        
+        renderZepQuizKPIs();
+        renderZepQuizClassGrid();
+        
+        if (currentDrilldownClassKey === classKey) {
+          openZepDrilldown(grade, classNum);
+        }
+      } else {
+        showToast("과자 지급 업데이트 실패: " + result.message, "error");
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+    }
+  } else {
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+  }
+};
+
+function spawnCookieParticles() {
+  const emojis = ["🍪", "✨", "🎉", "🍪"];
+  const particleCount = 20;
+  
+  for (let i = 0; i < particleCount; i++) {
+    const p = document.createElement("div");
+    p.className = "cookie-particle";
+    p.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+    
+    p.style.left = Math.random() * window.innerWidth + "px";
+    p.style.top = "-20px";
+    p.style.animationDelay = Math.random() * 0.5 + "s";
+    p.style.animationDuration = 1.0 + Math.random() * 0.8 + "s";
+    
+    document.body.appendChild(p);
+    
+    p.addEventListener("animationend", () => {
+      p.remove();
+    });
+  }
+}
 
 /*
 ========================================================================
@@ -6063,7 +6538,7 @@ function doPost(e) {
         var fileExtension = getExtensionFromBase64(entry.data.image);
         var customFileName = entry.contestTitle + "_" + entry.studentGrade + "학년" + entry.studentClass + "반" + entry.studentNumber + "번_" + entry.studentName + "_" + entry.id + fileExtension;
         
-        var uploadedFileUrl = saveBase64ToDrive(entry.data.image, customFileName);
+        var uploadedFileUrl = saveBase64ToDrive(entry.data.image, customFileName, entry.contestId);
         if (uploadedFileUrl) {
           entry.data.image = uploadedFileUrl; // Base64 스트링 대신 구글 드라이브 링크 대입!
         }
@@ -6251,6 +6726,218 @@ function doPost(e) {
         response = { status: "error", message: "업데이트 대상을 찾을 수 없음" };
       }
     }
+
+    // 8. 공모전 잠금 상태 조회 액션 (Settings 시트)
+    else if (requestData.action === "getContestLocks") {
+      var sheet = ss.getSheetByName("Settings");
+      var locks = {};
+      if (sheet) {
+        var data = sheet.getDataRange().getValues();
+        for (var i = 1; i < data.length; i++) {
+          var key = data[i][0];
+          if (key.indexOf("contest_lock_") === 0) {
+            var contestId = key.substring(13);
+            locks[contestId] = (data[i][1] === "true" || data[i][1] === true);
+          }
+        }
+      }
+      response = { status: "success", data: locks };
+    }
+
+    // 9. 공모전 잠금 상태 업데이트 액션 (Settings 시트)
+    else if (requestData.action === "updateContestLock") {
+      var sheet = ss.getSheetByName("Settings");
+      if (!sheet) {
+        sheet = ss.insertSheet("Settings");
+        sheet.appendRow(["Key", "Value"]);
+      }
+      var data = sheet.getDataRange().getValues();
+      var key = "contest_lock_" + requestData.contestId;
+      var foundIndex = -1;
+      for (var i = 1; i < data.length; i++) {
+        if (data[i][0] === key) {
+          foundIndex = i;
+          break;
+        }
+      }
+      if (foundIndex !== -1) {
+        sheet.getRange(foundIndex + 1, 2).setValue(String(requestData.isLocked));
+      } else {
+        sheet.appendRow([key, String(requestData.isLocked)]);
+      }
+      response = { status: "success", message: "잠금 설정 완료" };
+    }
+
+    // 10. 별표 상태 업데이트 액션 (Submissions 시트)
+    else if (requestData.action === "updateSubmissionStarStatus") {
+      var sheet = ss.getSheetByName("Submissions");
+      var updated = false;
+      if (sheet) {
+        var data = sheet.getDataRange().getValues();
+        for (var i = 1; i < data.length; i++) {
+          if (data[i][0] === requestData.id) {
+            var entryData = {};
+            try { 
+              entryData = JSON.parse(data[i][9]); 
+            } catch(e) {
+              entryData = { image: data[i][9] };
+            }
+            entryData.isStarred = requestData.isStarred;
+            sheet.getRange(i + 1, 10).setValue(JSON.stringify(entryData));
+            updated = true;
+            break;
+          }
+        }
+      }
+      if (updated) {
+        response = { status: "success", message: "별표 상태 업데이트 완료" };
+      } else {
+        response = { status: "error", message: "업데이트 대상을 찾을 수 없음" };
+      }
+    }
+
+    // 11. 젭퀴즈 통계 및 학급 현황 집계 액션 (Users + Submissions + Settings 시트)
+    else if (requestData.action === "getZepQuizStats") {
+      var usersSheet = ss.getSheetByName("Users");
+      var subsSheet = ss.getSheetByName("Submissions");
+      var settingsSheet = ss.getSheetByName("Settings");
+      var roundId = requestData.roundId || "zepquiz";
+      
+      // 1. Settings 시트에서 학급 과자 지급 상태 로드
+      var classPrizes = {};
+      if (settingsSheet) {
+        var settingsData = settingsSheet.getDataRange().getValues();
+        for (var i = 1; i < settingsData.length; i++) {
+          var key = settingsData[i][0];
+          if (key.indexOf("zep_prize_" + roundId + "_") === 0) {
+            var classKey = key.substring(("zep_prize_" + roundId + "_").length);
+            classPrizes[classKey] = settingsData[i][1];
+          }
+        }
+      }
+      
+      // 2. Users 시트에서 가입된 모든 학생 리스트 로드
+      var users = [];
+      if (usersSheet) {
+        var usersData = usersSheet.getDataRange().getValues();
+        for (var i = 1; i < usersData.length; i++) {
+          users.push({
+            userKey: usersData[i][0],
+            grade: parseInt(usersData[i][1], 10),
+            classNum: parseInt(usersData[i][2], 10),
+            number: parseInt(usersData[i][3], 10),
+            name: usersData[i][4]
+          });
+        }
+      }
+      
+      // 3. Submissions 시트에서 젭퀴즈 완료 제출 정보 로드
+      var submissions = {};
+      if (subsSheet) {
+        var subsData = subsSheet.getDataRange().getValues();
+        for (var i = 1; i < subsData.length; i++) {
+          var contestId = subsData[i][1];
+          if (contestId === roundId) {
+            var username = subsData[i][3];
+            var timestamp = subsData[i][8];
+            var dataJSON = {};
+            try { dataJSON = JSON.parse(subsData[i][9]); } catch (e) { dataJSON = { image: subsData[i][9] }; }
+            
+            submissions[username.toLowerCase()] = {
+              id: subsData[i][0],
+              timestamp: timestamp,
+              image: dataJSON.image || ""
+            };
+          }
+        }
+      }
+      
+      // 4. 학급별 빈 통계 뼈대 생성 (3~6학년, 1~3반)
+      var classes = {};
+      for (var g = 3; g <= 6; g++) {
+        for (var c = 1; c <= 3; c++) {
+          var classKey = g + "-" + c;
+          classes[classKey] = {
+            grade: g,
+            classNum: c,
+            totalStudents: 0,
+            completedCount: 0,
+            prizeStatus: classPrizes[classKey] || "waiting",
+            students: []
+          };
+        }
+      }
+      
+      // 5. 학생 매칭
+      for (var i = 0; i < users.length; i++) {
+        var u = users[i];
+        var classKey = u.grade + "-" + u.classNum;
+        
+        if (classes[classKey]) {
+          classes[classKey].totalStudents++;
+          
+          var usernameLower = u.userKey.toLowerCase();
+          var isCompleted = submissions.hasOwnProperty(usernameLower);
+          var subData = isCompleted ? submissions[usernameLower] : null;
+          
+          if (isCompleted) {
+            classes[classKey].completedCount++;
+          }
+          
+          classes[classKey].students.push({
+            name: u.name,
+            number: u.number,
+            username: u.userKey,
+            completed: isCompleted,
+            timestamp: subData ? subData.timestamp : "",
+            image: subData ? subData.image : "",
+            submissionId: subData ? subData.id : ""
+          });
+        }
+      }
+      
+      // 번호 순 정렬
+      for (var key in classes) {
+        if (classes.hasOwnProperty(key)) {
+          classes[key].students.sort(function(a, b) {
+            return a.number - b.number;
+          });
+        }
+      }
+      
+      response = { status: "success", classes: classes };
+    }
+
+    // 12. 학급 단체 과자 세트 지급 상태 업데이트 액션 (Settings 시트)
+    else if (requestData.action === "updateClassPrizeStatus") {
+      var sheet = ss.getSheetByName("Settings");
+      if (!sheet) {
+        sheet = ss.insertSheet("Settings");
+        sheet.appendRow(["Key", "Value"]);
+      }
+      
+      var roundId = requestData.roundId || "zepquiz";
+      var classKey = requestData.classKey;
+      var prizeStatus = requestData.prizeStatus;
+      
+      var key = "zep_prize_" + roundId + "_" + classKey;
+      var data = sheet.getDataRange().getValues();
+      var foundIndex = -1;
+      for (var i = 1; i < data.length; i++) {
+        if (data[i][0] === key) {
+          foundIndex = i;
+          break;
+        }
+      }
+      
+      if (foundIndex !== -1) {
+        sheet.getRange(foundIndex + 1, 2).setValue(prizeStatus);
+      } else {
+        sheet.appendRow([key, prizeStatus]);
+      }
+      
+      response = { status: "success", message: "과자 지급 상태 업데이트 완료" };
+    }
     
   } catch (error) {
     response = { status: "error", message: error.toString() };
@@ -6273,8 +6960,8 @@ function extractFileIdFromUrl(url) {
   return id ? id.trim() : null;
 }
 
-// [헬퍼] Base64 데이터를 파싱하여 구글 드라이브에 이미지로 저장하는 함수
-function saveBase64ToDrive(base64Data, fileName) {
+// [헬퍼] Base64 데이터를 파싱하여 구글 드라이브에 이미지로 저장하는 함수 (젭퀴즈 격리 저장 기능 탑재)
+function saveBase64ToDrive(base64Data, fileName, contestId) {
   try {
     var split = base64Data.split(',');
     var contentType = split[0].match(/:(.*?);/)[1];
@@ -6283,6 +6970,11 @@ function saveBase64ToDrive(base64Data, fileName) {
     var fileBlob = Utilities.newBlob(decodedBytes, contentType, fileName);
     
     var folderName = "SORO_Submissions";
+    // 젭퀴즈 제출인 경우 전용 폴더로 분리
+    if (contestId && contestId.indexOf("zepquiz") === 0) {
+      folderName = "SORO_ZepQuizzes";
+    }
+    
     var folders = DriveApp.getFoldersByName(folderName);
     var folder;
     
@@ -6290,6 +6982,19 @@ function saveBase64ToDrive(base64Data, fileName) {
       folder = folders.next();
     } else {
       folder = DriveApp.createFolder(folderName);
+    }
+    
+    // 젭퀴즈 하위 회차 폴더 격리
+    if (contestId && contestId.indexOf("zepquiz") === 0) {
+      var subFolderName = contestId; // "zepquiz" 등
+      var subFolders = folder.getFoldersByName(subFolderName);
+      var subFolder;
+      if (subFolders.hasNext()) {
+        subFolder = subFolders.next();
+      } else {
+        subFolder = folder.createFolder(subFolderName);
+      }
+      folder = subFolder;
     }
     
     var createdFile = folder.createFile(fileBlob);

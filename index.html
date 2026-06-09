@@ -451,8 +451,19 @@
             <p class="admin-sidebar-subtitle">SORO CONTEST SYSTEM v2.3.0</p>
           </div>
         </div>
+
+        <!-- 3-1. 듀얼 모드 탭 스위처 -->
+        <div class="admin-tab-switcher" style="display: flex; background: rgba(255,255,255,0.05); border-radius: 8px; padding: 3px; margin: 10px 16px; border: 1px solid rgba(255,255,255,0.08);">
+          <button class="admin-tab-btn active" id="btn-tab-contest" onclick="setAdminTabMode('contest')" style="flex: 1; background: none; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; color: white; font-weight: 800; font-size: 0.72rem; text-align: center; transition: all 0.2s;">
+            🎨 공모전 관리
+          </button>
+          <button class="admin-tab-btn" id="btn-tab-zepquiz" onclick="setAdminTabMode('zepquiz')" style="flex: 1; background: none; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; color: #808088; font-weight: 800; font-size: 0.72rem; text-align: center; transition: all 0.2s;">
+            🍪 젭퀴즈 현황
+          </button>
+        </div>
         
-        <div class="admin-kpi-section">
+        <!-- 공모전용 KPI 섹션 -->
+        <div class="admin-kpi-section" id="admin-contest-kpi-section">
           <div class="admin-kpi-card" id="kpi-total-subs">
             <span class="kpi-label">총 제출 작품수</span>
             <div class="kpi-value-container">
@@ -479,11 +490,48 @@
           </div>
         </div>
 
+        <!-- 3-2. 젭퀴즈용 KPI 섹션 (기본 숨김) -->
+        <div class="admin-kpi-section" id="admin-zepquiz-kpi-section" style="display: none;">
+          <div class="admin-kpi-card" id="kpi-zep-total">
+            <span class="kpi-label">젭퀴즈 총 제출수</span>
+            <div class="kpi-value-container">
+              <span class="kpi-value" id="admin-zep-stat-total" style="color: #6366f1;">0</span><span class="kpi-unit">건</span>
+            </div>
+          </div>
+          <div class="admin-kpi-card" id="kpi-zep-ratio">
+            <span class="kpi-label">전체 참여율</span>
+            <div class="kpi-value-container">
+              <span class="kpi-value" id="admin-zep-stat-ratio" style="color: #10b981;">0%</span>
+            </div>
+          </div>
+          <div class="admin-kpi-card" id="kpi-zep-classes">
+            <span class="kpi-label">100% 완료 학급</span>
+            <div class="kpi-value-container">
+              <span class="kpi-value" id="admin-zep-stat-classes" style="color: #f59e0b;">0/0</span><span class="kpi-unit">개반</span>
+            </div>
+          </div>
+          <div class="admin-kpi-card" id="kpi-zep-cookies">
+            <span class="kpi-label">🍪 과자 지급 완료</span>
+            <div class="kpi-value-container">
+              <span class="kpi-value" id="admin-zep-stat-cookies" style="color: #ec4899;">0</span><span class="kpi-unit">개반</span>
+            </div>
+          </div>
+        </div>
+
         <div class="admin-sidebar-divider"></div>
         
-        <div class="admin-grade-metrics">
+        <!-- 공모전용 학년 통계 -->
+        <div class="admin-grade-metrics" id="admin-contest-grade-metrics">
           <h3 class="admin-metrics-title">학년별 참여 현황</h3>
           <div id="admin-grade-metrics-container" class="admin-grade-metrics-list">
+            <!-- JS로 동적 렌더링 -->
+          </div>
+        </div>
+
+        <!-- 젭퀴즈용 학년 통계 (기본 숨김) -->
+        <div class="admin-grade-metrics" id="admin-zepquiz-grade-metrics" style="display: none;">
+          <h3 class="admin-metrics-title">학년별 젭퀴즈 참여율</h3>
+          <div id="admin-zep-grade-metrics-container" class="admin-grade-metrics-list">
             <!-- JS로 동적 렌더링 -->
           </div>
         </div>
@@ -499,47 +547,90 @@
       <main class="admin-main-panel">
         
         <!-- 우측 상단 헤더 & 닫기 -->
-        <div class="admin-main-header">
-          <div>
-            <div style="display: flex; align-items: center; gap: 10px;">
+        <div class="admin-main-header" style="position: relative;">
+          <div style="position: relative; flex-grow: 1;">
+            <div style="display: flex; align-items: center; gap: 12px;">
               <h1 class="admin-main-title">공모전 데이터 센터</h1>
-              <button id="admin-panel-toggle-btn" class="admin-panel-toggle-btn" onclick="toggleAdminContestPanel()" title="공모전 제어 카드 패널 접기/펼치기">
-                접기 🔼
+              <button id="admin-panel-toggle-btn" class="admin-panel-toggle-btn" onclick="toggleAdminContestPanel()" title="공모전 제어 패널 열기/닫기">
+                ⚙️ 공모전 제어
               </button>
             </div>
             <p class="admin-main-subtitle">공모전 시작/마감 제어 및 심사 자료 통합 관리</p>
+            
+            <!-- 공모전 제어 카드 패널 (플로팅 2열 그리드) -->
+            <div id="admin-contest-cards" class="admin-contest-grid collapsed">
+              <!-- JS에서 동적 렌더링 -->
+            </div>
           </div>
           <button class="admin-drawer-close-btn" id="admin-drawer-close" aria-label="닫기">×</button>
         </div>
 
-        <!-- 공모전 제어 카드 패널 (3x2 그리드) -->
-        <div id="admin-contest-cards" class="admin-contest-grid">
-          <!-- JS에서 동적 렌더링 -->
-        </div>
+        <!-- 공모전 메인 영역 -->
+        <div id="admin-contest-main-area">
+          <!-- 통합 필터 및 액션 바 -->
+          <div class="admin-action-bar" style="display: flex; flex-direction: column; gap: 8px; align-items: stretch;">
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 12px; flex-wrap: wrap;">
+              <!-- 좌측: 필터 컨트롤러 그룹 -->
+              <div class="admin-filter-group" style="margin-bottom: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <!-- 심사 후보 여부 필터 -->
+                <div id="admin-star-filters" class="admin-filter-chips">
+                  <button class="admin-filter-chip active" data-filter="all">전체</button>
+                  <button class="admin-filter-chip" data-filter="starred">★ 후보작</button>
+                </div>
+                
+                <div class="admin-filter-divider"></div>
+                
+                <!-- 사은품 수령 여부 필터 -->
+                <div id="admin-prize-filters" class="admin-filter-chips">
+                  <button class="admin-filter-chip active" data-filter="all">전체 사은품</button>
+                  <button class="admin-filter-chip" data-filter="waiting">🎁 대기중</button>
+                  <button class="admin-filter-chip" data-filter="delivered">✅ 지급완료</button>
+                </div>
+                
+                <div class="admin-filter-divider"></div>
 
-        <!-- 통합 필터 및 액션 바 -->
-        <div class="admin-action-bar">
-          <!-- 좌측: 필터 컨트롤러 그룹 -->
-          <div class="admin-filter-group">
-            <!-- 심사 후보 여부 필터 -->
-            <div id="admin-star-filters" class="admin-filter-chips">
-              <button class="admin-filter-chip active" data-filter="all">전체</button>
-              <button class="admin-filter-chip" data-filter="starred">★ 심사 후보만</button>
+                <!-- 아코디언 토글 버튼 -->
+                <button id="admin-filter-accordion-btn" class="admin-filter-chip" onclick="toggleAdminFilterAccordion()" style="display: flex; align-items: center; gap: 4px; border: 1px dashed rgba(255,255,255,0.15); background: none; color: var(--text-secondary); cursor: pointer;">
+                  🔍 상세필터 🔽
+                </button>
+              </div>
+
+              <!-- 우측: 검색 및 Excel 추출 -->
+              <div class="admin-search-export-group" style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+                <div class="admin-search-wrapper">
+                  <svg class="admin-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                  </svg>
+                  <input type="text" id="admin-search-input" placeholder="학생 이름 또는 내용 검색...">
+                </div>
+
+                <!-- 뷰 모드 스위처 (갤러리/테이블) -->
+                <div class="admin-view-switcher" style="display: flex; background: rgba(255,255,255,0.05); border-radius: 8px; padding: 2px; border: 1px solid rgba(255,255,255,0.08);">
+                  <button class="admin-view-btn active" id="btn-view-gallery" onclick="setAdminViewMode('gallery')" title="갤러리 뷰" style="background: none; border: none; padding: 4px 8px; border-radius: 6px; cursor: pointer; color: white; display: flex; align-items: center; justify-content: center; font-size: 0.75rem;">
+                    🖼️ 갤러리
+                  </button>
+                  <button class="admin-view-btn" id="btn-view-table" onclick="setAdminViewMode('table')" title="테이블 뷰" style="background: none; border: none; padding: 4px 8px; border-radius: 6px; cursor: pointer; color: #808088; display: flex; align-items: center; justify-content: center; font-size: 0.75rem;">
+                    📋 표 뷰
+                  </button>
+                </div>
+
+                <button id="admin-export-csv-btn" class="admin-btn-export">
+                  <svg class="admin-export-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                  Excel 추출
+                </button>
+              </div>
             </div>
-            
-            <div class="admin-filter-divider"></div>
-            
-            <!-- 사은품 수령 여부 필터 -->
-            <div id="admin-prize-filters" class="admin-filter-chips">
-              <button class="admin-filter-chip active" data-filter="all">전체 사은품</button>
-              <button class="admin-filter-chip" data-filter="waiting">🎁 대기중</button>
-              <button class="admin-filter-chip" data-filter="delivered">✅ 지급완료</button>
-            </div>
-            
-            <div class="admin-filter-divider"></div>
-            
+          </div>
+
+          <!-- 아코디언 접이식 상세 필터 영역 -->
+          <div id="admin-detail-filters-accordion" class="admin-detail-filters-accordion collapsed" style="padding: 0 16px 12px 16px; margin-top: -8px;">
             <!-- 이중 분할 학급 필터 -->
-            <div class="admin-double-filter">
+            <div class="admin-double-filter" style="margin-bottom: 0;">
               <div id="admin-grade-selector" class="admin-capsule-group">
                 <button class="admin-capsule active" data-grade="all">전체 학년</button>
                 <button class="admin-capsule" data-grade="3">3학년</button>
@@ -553,30 +644,39 @@
             </div>
           </div>
 
-          <!-- 우측: 검색 및 Excel 추출 -->
-          <div class="admin-search-export-group">
-            <div class="admin-search-wrapper">
-              <svg class="admin-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg>
-              <input type="text" id="admin-search-input" placeholder="학생 이름 또는 내용 검색...">
+          <!-- 실시간 데이터 갤러리 뷰 -->
+          <div class="admin-gallery-container" id="admin-gallery-view-wrapper">
+            <div id="admin-gallery-list" class="admin-gallery-grid">
+              <!-- JS에서 동적으로 갤러리 카드 채움 -->
             </div>
-            <button id="admin-export-csv-btn" class="admin-btn-export">
-              <svg class="admin-export-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="7 10 12 15 17 10"></polyline>
-                <line x1="12" y1="15" x2="12" y2="3"></line>
-              </svg>
-              Excel 추출
-            </button>
+          </div>
+
+          <!-- 실시간 데이터 테이블 뷰를 담을 영역 (app.js 연동 대비용) -->
+          <div class="admin-gallery-container" id="admin-table-view-wrapper" style="display: none;">
+            <div style="padding: 20px; text-align: center; color: var(--text-secondary);">
+              표 뷰는 준비 중입니다.
+            </div>
           </div>
         </div>
 
-        <!-- 실시간 데이터 갤러리 뷰 -->
-        <div class="admin-gallery-container" id="admin-gallery-view-wrapper">
-          <div id="admin-gallery-list" class="admin-gallery-grid">
-            <!-- JS에서 동적으로 갤러리 카드 채움 -->
+        <!-- 3-1. 젭퀴즈 메인 영역 (기본 숨김) -->
+        <div id="admin-zepquiz-main-area" style="display: none; padding: 16px; overflow-y: auto; height: calc(100% - 70px);">
+          <!-- 3-3. 학급별 달성 카드 그리드 -->
+          <div id="admin-zep-class-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px;">
+            <!-- JS로 동적 학급 카드 렌더링 -->
+          </div>
+
+          <!-- 3-4. 학급 드릴다운 상세 영역 (기본 숨김) -->
+          <div id="admin-zep-drilldown-area" style="display: none; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 20px; margin-top: 16px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 12px;">
+              <h2 id="admin-zep-drilldown-title" style="font-size: 1.1rem; font-weight: 800; color: white; display: flex; align-items: center; gap: 8px;">
+                <span>반 상세 현황</span>
+              </h2>
+              <button class="btn btn-secondary" onclick="closeZepDrilldown()" style="padding: 4px 12px; font-size: 0.75rem; font-weight: 800; border-radius: 6px; cursor: pointer;">닫기</button>
+            </div>
+            <div id="admin-zep-drilldown-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px;">
+              <!-- JS로 학생 카드 렌더링 -->
+            </div>
           </div>
         </div>
 
