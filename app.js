@@ -44,6 +44,36 @@ const CONTESTS_DATA = [
     </svg>`
   },
   {
+    id: "zepquiz",
+    title: "저작권 퀴즈",
+    month: 6,
+    monthText: "6월",
+    period: "2026. 6. 1.(월) ~ 2026. 6. 30.(화)",
+    summary: "zepquiz에 접속하여 저작권 문제를 풀고 완료 스크린샷을 찍어서 업로드하세요!",
+    description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 최종 완료 화면(점수 또는 완료 문구가 보이는 화면)을 캡처하여 증빙 자료로 업로드해 주세요.",
+    rules: [
+      "참가 대상: 본교 3~6학년 학생 누구나 (개인 참여)",
+      "공모 주제: 저작권 퀴즈 풀이 완료 인증",
+      "제출물: 퀴즈 해결 완료 화면 스크린샷 이미지 파일",
+      "특별 혜택: 학급 내 모든 친구가 누락 없이 응모할 경우, 해당 학급 전체에 맛있는 과자 세트를 지급합니다!",
+      "참고 링크: <a href=\"https://quiz.zep.us/play/R533q9r\" target=\"_blank\" class=\"contest-link\">zepquiz 바로가기 (https://quiz.zep.us/play/R533q9r)</a>"
+    ],
+    evaluationCriteria: [
+      { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "50%" },
+      { category: "본인 인증", desc: "완료 화면에서 본인의 참여 내역을 확인할 수 있는 정보를 식별합니다.", weight: "30%" },
+      { category: "성실성", desc: "기간 내 퀴즈를 누락 없이 제출했는지 평가합니다.", weight: "20%" }
+    ],
+    submissionType: "image",
+    inputLabel: "퀴즈 완료 스크린샷 캡처본",
+    placeholder: "PNG, JPG 형식의 이미지 파일 (최대 5MB)",
+    icon: `<svg class="card-visual-svg" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="10" y="6" width="44" height="52" rx="5" />
+      <path d="M20 18h24M20 28h24M20 38h14" />
+      <path d="M40 40l4 4 8-8" stroke="#10b981" />
+      <circle cx="32" cy="18" r="4" fill="currentColor" fill-opacity="0.1" />
+    </svg>`
+  },
+  {
     id: "cuttoon",
     title: "안전 사고 예방 컷툰",
     month: 7,
@@ -415,7 +445,7 @@ const GALLERY_2025_DATA = RAW_2025_KEYRING_DATA.trim().split("\n").map(line => {
 // STATE MANAGEMENT & USER SESSION CONFIGURATION
 // ====================================================
 let currentVirtualMonth = 6;
-const FORCE_ACTIVE_CONTESTS = ["keyring"];
+const FORCE_ACTIVE_CONTESTS = ["keyring", "zepquiz"];
 
 function getContestStatus(contestOrMonth) {
   // If contestOrMonth is an object, extract month and id
@@ -430,8 +460,8 @@ function getContestStatus(contestOrMonth) {
     }
   }
 
-  // 키링 공모전만 활성화하고 나머지는 모두 접수 마감(closed)으로 변경
-  if (contestId === "keyring" || contestOrMonth === "keyring" || contestMonth === 6) {
+  // 키링 공모전 및 저작권 퀴즈(6월)만 활성화하고 나머지는 모두 접수 마감(closed)으로 변경
+  if (contestId === "keyring" || contestId === "zepquiz" || contestOrMonth === "keyring" || contestOrMonth === "zepquiz" || contestMonth === 6) {
     return "active";
   }
   return "closed";
