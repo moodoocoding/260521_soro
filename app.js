@@ -984,6 +984,12 @@ function resetPasswordResetUI() {
     loginSubmitBtn.disabled = false;
     loginSubmitBtn.style.opacity = "1";
   }
+
+  const passwordInput = document.getElementById("login-password");
+  const confirmInput = document.getElementById("login-confirm-password");
+  if (passwordInput) passwordInput.value = "";
+  if (confirmInput) confirmInput.value = "";
+  document.querySelectorAll("#login-form .form-group").forEach(g => g.classList.remove("has-error"));
 }
 
 function closeAuthDrawer() {
@@ -4398,12 +4404,8 @@ function setupEventListeners() {
       const passwordLabel = document.querySelector("label[for='login-password']");
       const loginSubmitBtn = document.querySelector("#login-form button[type='submit']");
 
-      // 비밀번호 제외한 유효성 검증
-      document.querySelectorAll("#login-form .form-group").forEach(g => {
-        if (!g.contains(passwordInput) && !g.contains(confirmInput)) {
-          g.classList.remove("has-error");
-        }
-      });
+      // 모든 필드 에러 상태 청소
+      document.querySelectorAll("#login-form .form-group").forEach(g => g.classList.remove("has-error"));
 
       let isValid = true;
       if (!grade.value) {
@@ -4428,24 +4430,29 @@ function setupEventListeners() {
         return;
       }
 
-      // 비밀번호 확인 칸이 켜져있지 않은 상태 (1차 클릭)
+      // 1. 비밀번호 확인 입력창이 아직 안 보이는 상태 (1차 클릭)
       if (passwordGroup.style.display === "none") {
+        // 첫 번째 비밀번호 필드에 변경할 비밀번호가 올바르게 들어갔는지 확인
+        if (!passwordInput.value || passwordInput.value.length < 4) {
+          passwordInput.parentElement.classList.add("has-error");
+          showToast("비밀번호 칸에 새로 변경할 비밀번호(최소 4자 이상)를 먼저 입력해 주세요.", "error");
+          passwordInput.focus();
+          return;
+        }
+
+        // 비밀번호 확인란을 노출하고 UI 라벨을 업데이트
         passwordGroup.style.display = "block";
         if (passwordLabel) passwordLabel.textContent = "새 비밀번호 설정";
         if (loginSubmitBtn) {
           loginSubmitBtn.disabled = true;
           loginSubmitBtn.style.opacity = "0.5";
         }
-        passwordInput.value = "";
         confirmInput.value = "";
-        passwordInput.focus();
-        showToast("새로 지정할 비밀번호를 입력하고, 그 밑에 한번 더 확인 입력한 후 초기화 버튼을 다시 눌러주세요.", "info");
-      } 
-      // 비밀번호 확인 칸이 이미 켜져있는 상태 (2차 클릭)
+        confirmInput.focus();
+        showToast("비밀번호 확인란에 동일하게 한 번 더 입력한 뒤, 초기화 버튼을 한 번 더 눌러주세요.", "info");
+      }
+      // 2. 비밀번호 확인 입력창이 이미 보이고 있는 상태 (2차 클릭)
       else {
-        passwordInput.parentElement.classList.remove("has-error");
-        confirmInput.parentElement.classList.remove("has-error");
-
         let pwValid = true;
         if (!passwordInput.value || passwordInput.value.length < 4) {
           passwordInput.parentElement.classList.add("has-error");
