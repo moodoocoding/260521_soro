@@ -1902,7 +1902,7 @@ function openContestDetails(contestId) {
   const criteriaListContainer = document.getElementById("criteria-cards-list");
   criteriaListContainer.innerHTML = "";
   
-  if (contest.evaluationCriteria && contest.evaluationCriteria.length > 0) {
+  if (contest.id !== "zepquiz" && contest.evaluationCriteria && contest.evaluationCriteria.length > 0) {
     const tabCriteria = document.getElementById("drawer-tab-criteria");
     if (tabCriteria) tabCriteria.style.display = "flex";
     contest.evaluationCriteria.forEach(item => {
@@ -1942,14 +1942,18 @@ function openContestDetails(contestId) {
     noticeText.innerHTML = `🔒 <strong>이 대회의 접수가 종료되었습니다.</strong><br>${contest.period || `2026년 ${contest.month}월 한 달 간`} 진행되었던 작품 접수가 완료되었습니다.`;
   }
 
-  // Show 3rd tab for all contests
+  // Show 3rd tab for all contests (hide for zepquiz as requested)
   const tabGallery = document.getElementById("drawer-tab-gallery");
   if (tabGallery) {
-    tabGallery.style.display = "flex";
-    if (contest.id === "keyring") {
-      tabGallery.textContent = "2025 출품작 🏆";
+    if (contest.id === "zepquiz") {
+      tabGallery.style.display = "none";
     } else {
-      tabGallery.textContent = "제출작 갤러리 🏆";
+      tabGallery.style.display = "flex";
+      if (contest.id === "keyring") {
+        tabGallery.textContent = "2025 출품작 🏆";
+      } else {
+        tabGallery.textContent = "제출작 갤러리 🏆";
+      }
     }
   }
 
