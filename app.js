@@ -414,8 +414,8 @@ const GALLERY_2025_DATA = RAW_2025_KEYRING_DATA.trim().split("\n").map(line => {
 // ====================================================
 // STATE MANAGEMENT & USER SESSION CONFIGURATION
 // ====================================================
-let currentVirtualMonth = 9;
-const FORCE_ACTIVE_CONTESTS = ["keyring", "library", "pixelart"];
+let currentVirtualMonth = 6;
+const FORCE_ACTIVE_CONTESTS = ["keyring"];
 
 function getContestStatus(contestOrMonth) {
   // If contestOrMonth is an object, extract month and id
@@ -430,30 +430,11 @@ function getContestStatus(contestOrMonth) {
     }
   }
 
-  // 3. 관리자 설정이 없을 때 기본 폴백 (기존 월별 자동 활성화 정책)
-  if (contestId && FORCE_ACTIVE_CONTESTS.includes(contestId)) {
+  // 키링 공모전만 활성화하고 나머지는 모두 접수 마감(closed)으로 변경
+  if (contestId === "keyring" || contestOrMonth === "keyring" || contestMonth === 6) {
     return "active";
   }
-  if (contestOrMonth && FORCE_ACTIVE_CONTESTS.includes(contestOrMonth)) {
-    return "active";
-  }
-  // FORCE_ACTIVE_CONTESTS에 해당하는 공모전의 월인 경우 활성화 (6월, 9월, 11월)
-  const forceActiveMonths = [6, 9, 11];
-  if (contestMonth !== null && forceActiveMonths.includes(contestMonth)) {
-    return "active";
-  }
-
-  if (typeof contestOrMonth === "object" && contestOrMonth.activeMonths?.includes(currentVirtualMonth)) {
-    return "active";
-  }
-
-  if (contestMonth === currentVirtualMonth) {
-    return "active";
-  } else if (contestMonth > currentVirtualMonth) {
-    return "pending";
-  } else {
-    return "closed";
-  }
+  return "closed";
 }
 
 let activeContest = null;
@@ -603,8 +584,8 @@ function updateThemeIcon(theme) {
 // PRODUCTION TIME CONFIGURATION (JUNE ONLY)
 // ====================================================
 function initVirtualTime() {
-  // 실제 프로덕션 환경의 진행 월을 9월로 고정합니다.
-  currentVirtualMonth = 9;
+  // 실제 프로덕션 환경의 진행 월을 6월로 고정합니다.
+  currentVirtualMonth = 6;
   sessionStorage.removeItem("soro_virtual_month"); // 가상 오버라이드 제거
 
   const statMonthEl = document.getElementById("stat-current-month");
@@ -4823,15 +4804,21 @@ async function executeLoggedInLookup() {
       `;
     }
 
+    const isPrizeDelivered = entryData && entryData.prizeStatus === "delivered";
+    const prizeBadgeHtml = isPrizeDelivered
+      ? `<span class="prize-badge delivered">🎁 사은품 수령 완료!</span>`
+      : `<span class="prize-badge waiting">📦 사은품 지급 대기 중 (교무실에서 받아가세요)</span>`;
+
     card.innerHTML = `
       <div class="submitted-card-header">
         <div class="submitted-card-title-group">
           <h4>${entry.contestTitle}</h4>
           <div class="submitted-card-date">제출 시각: ${entry.timestamp}</div>
+          ${prizeBadgeHtml}
         </div>
       </div>
       <div class="submitted-card-body">
-        <div><strong>소속 인적 사항:</strong> ${entry.studentGrade}학년 ${entry.studentClass} ${entry.studentNumber}</div>
+        <div><strong>소속 인적 사항:</strong> ${entry.studentGrade}학년 ${entry.studentClass}반 ${entry.studentNumber}번</div>
         ${contentHtml}
       </div>
       <div class="submitted-card-footer">
@@ -4879,7 +4866,15 @@ window.confirmDeleteEntry = async function (entryId) {
 
     // 2. Fallback Local Mode
     const allSubmissions = JSON.parse(localStorage.getItem("soro_submissions") || "[]");
-    const updatedSubmissions = allSubmissions.filter(entry => entry.id !== entryId);
+    const target = allSubmissions.find(entry => entry.id === entryId);
+    let updatedSubmissions;
+    if (target) {
+      updatedSubmissions = allSubmissions.filter(entry => 
+        !(entry.studentUsername.toLowerCase() === target.studentUsername.toLowerCase() && entry.contestId === target.contestId)
+      );
+    } else {
+      updatedSubmissions = allSubmissions.filter(entry => entry.id !== entryId);
+    }
     localStorage.setItem("soro_submissions", JSON.stringify(updatedSubmissions));
 
     const element = document.getElementById(`entry-${entryId}`);
@@ -5031,6 +5026,7 @@ let adminCurrentGradeFilter = "all";
 let adminCurrentClassOnlyFilter = "all"; // "all" | "1" | "2" | "3"
 let adminSearchQuery = "";
 let adminStarFilter = "all"; // "all" | "starred"
+let adminPrizeFilter = "all"; // "all" | "waiting" | "delivered"
 
 // 1. Initialize Event Listeners
 function initAdminPanel() {
@@ -5062,6 +5058,19 @@ function initAdminPanel() {
         starFilters.querySelectorAll(".admin-filter-chip").forEach(c => c.classList.remove("active"));
         e.target.classList.add("active");
         adminStarFilter = e.target.dataset.filter;
+        renderAdminSubmissionsTable();
+      });
+    });
+  }
+
+  // Prize filter chips
+  const prizeFilters = document.getElementById("admin-prize-filters");
+  if (prizeFilters) {
+    prizeFilters.querySelectorAll(".admin-filter-chip").forEach(chip => {
+      chip.addEventListener("click", (e) => {
+        prizeFilters.querySelectorAll(".admin-filter-chip").forEach(c => c.classList.remove("active"));
+        e.target.classList.add("active");
+        adminPrizeFilter = e.target.dataset.filter;
         renderAdminSubmissionsTable();
       });
     });
@@ -5159,6 +5168,7 @@ function renderAdminKPIs() {
   const totalEl = document.getElementById("admin-stat-total");
   const studentsEl = document.getElementById("admin-stat-students");
   const starredEl = document.getElementById("admin-stat-starred");
+  const prizesEl = document.getElementById("admin-stat-prizes");
   const metricsContainer = document.getElementById("admin-grade-metrics-container");
   
   const deduped = deduplicateSubmissions(adminAllSubmissions);
@@ -5173,6 +5183,17 @@ function renderAdminKPIs() {
     if (stars[entry.id]) starredCount++;
   });
   if (starredEl) starredEl.textContent = starredCount;
+
+  // Prizes statistics
+  let prizesDeliveredCount = 0;
+  adminAllSubmissions.forEach(entry => {
+    if (entry.data && entry.data.prizeStatus === "delivered") {
+      prizesDeliveredCount++;
+    }
+  });
+  if (prizesEl) {
+    prizesEl.textContent = `${prizesDeliveredCount}/${adminAllSubmissions.length}`;
+  }
 
   // Grade participation gauges
   if (metricsContainer) {
@@ -5335,11 +5356,15 @@ async function fetchAndRenderAdminData() {
       fallbackUsed = true;
     }
     
+    const localPrizes = JSON.parse(localStorage.getItem("soro_admin_prizes") || "{}");
     adminAllSubmissions.forEach(entry => {
       if (entry && entry.data && typeof entry.data === "string") {
         try { entry.data = JSON.parse(entry.data); } catch (e) { entry.data = {}; }
       } else if (entry && !entry.data) {
         entry.data = {};
+      }
+      if (entry && entry.data && !entry.data.prizeStatus && localPrizes[entry.id]) {
+        entry.data.prizeStatus = localPrizes[entry.id];
       }
     });
 
@@ -5360,12 +5385,15 @@ async function fetchAndRenderAdminData() {
     }
   } catch (globalErr) {
     console.error("Global admin fetch error:", globalErr);
-    const localBackups = JSON.parse(localStorage.getItem("soro_submissions") || "[]");
     adminAllSubmissions = localBackups.filter(s => activeContestIds.includes(s.contestId));
+    const localPrizesFallback = JSON.parse(localStorage.getItem("soro_admin_prizes") || "{}");
     adminAllSubmissions.forEach(entry => {
       if (entry && entry.data && typeof entry.data === "string") {
         try { entry.data = JSON.parse(entry.data); } catch (e) { entry.data = {}; }
       } else if (entry && !entry.data) { entry.data = {}; }
+      if (entry && entry.data && !entry.data.prizeStatus && localPrizesFallback[entry.id]) {
+        entry.data.prizeStatus = localPrizesFallback[entry.id];
+      }
     });
     showToast("네트워크 연결 불안정 → 로컬 백업으로 화면을 구성했습니다.", "warning");
     renderAdminKPIs();
@@ -5535,6 +5563,13 @@ function renderAdminSubmissionsGallery() {
     filtered = filtered.filter(entry => stars[entry.id]);
   }
 
+  // Prize filter
+  if (adminPrizeFilter === "waiting") {
+    filtered = filtered.filter(entry => !entry.data || entry.data.prizeStatus !== "delivered");
+  } else if (adminPrizeFilter === "delivered") {
+    filtered = filtered.filter(entry => entry.data && entry.data.prizeStatus === "delivered");
+  }
+
   if (filtered.length === 0) {
     container.innerHTML = `
       <div style="grid-column: 1 / -1; text-align: center; padding: 60px; color: var(--text-secondary);">
@@ -5592,6 +5627,7 @@ function renderAdminSubmissionsGallery() {
 
     const titleText = (entry.data && entry.data.title) ? entry.data.title : "";
     const displayDesc = titleText || (entry.data && entry.data.text ? entry.data.text : (entry.data && entry.data.description ? entry.data.description : ""));
+    const isPrizeDelivered = entry.data && entry.data.prizeStatus === "delivered";
 
     html += `
       <div class="admin-gallery-card ${isStarred ? 'starred' : ''}" data-id="${entry.id}">
@@ -5614,6 +5650,10 @@ function renderAdminSubmissionsGallery() {
           ${displayDesc ? `<p style="margin:4px 0 0 0; font-size:0.68rem; color: var(--text-secondary); display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical; overflow:hidden; line-height:1.4;">${displayDesc}</p>` : ''}
           
           <div class="admin-gallery-actions">
+            <!-- 사은품 지급 토글 -->
+            <button class="action-btn prize-btn ${isPrizeDelivered ? 'active' : ''}" onclick="toggleAdminPrize('${entry.id}')" title="사은품 지급 토글" style="background: none; border: none; opacity: ${isPrizeDelivered ? '1' : '0.35'}; filter: ${isPrizeDelivered ? 'none' : 'grayscale(100%)'}; cursor: pointer; padding: 4px; font-size: 0.95rem; transition: all 0.2s ease; margin-right: 6px;">
+              🎁
+            </button>
             <!-- 별표 후보 등록 -->
             <button class="action-btn star-btn" onclick="toggleAdminStar('${entry.id}')" title="심사 후보 지정/해제" style="background: none; border: none; color: ${isStarred ? '#fbbf24' : '#606066'}; cursor: pointer; padding: 4px; font-size: 0.95rem;">
               ${isStarred ? '★' : '☆'}
@@ -5648,6 +5688,74 @@ window.toggleAdminStar = function(submissionId) {
   renderAdminSubmissionsTable();
 };
 
+// 9-2. Toggle Prize Delivered Marking
+window.toggleAdminPrize = async function(submissionId) {
+  const entry = adminAllSubmissions.find(s => s.id === submissionId);
+  if (!entry) return;
+
+  if (!entry.data) entry.data = {};
+  const currentStatus = entry.data.prizeStatus === "delivered" ? "waiting" : "delivered";
+  
+  // Update state locally first (Optimistic update)
+  entry.data.prizeStatus = currentStatus;
+  
+  // Also save in local storage fallback
+  const localPrizes = JSON.parse(localStorage.getItem("soro_admin_prizes") || "{}");
+  localPrizes[submissionId] = currentStatus;
+  localStorage.setItem("soro_admin_prizes", JSON.stringify(localPrizes));
+
+  // Try to update on the remote DB if API is available
+  if (GOOGLE_SHEET_API_URL) {
+    const payload = {
+      action: "updateSubmissionPrizeStatus",
+      id: submissionId,
+      prizeStatus: currentStatus
+    };
+    try {
+      const response = await fetch(GOOGLE_SHEET_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: JSON.stringify(payload)
+      });
+      const result = await response.json();
+      if (result.status !== "success") {
+        console.warn("API prize update failed:", result.message);
+      }
+    } catch (err) {
+      console.warn("API prize update network error:", err);
+    }
+  }
+
+  // Also update the backup in soro_submissions local storage if it exists there
+  const allSubmissions = JSON.parse(localStorage.getItem("soro_submissions") || "[]");
+  const localIndex = allSubmissions.findIndex(s => s.id === submissionId);
+  if (localIndex !== -1) {
+    const localEntry = allSubmissions[localIndex];
+    let localData = {};
+    try {
+      localData = typeof localEntry.data === "string" ? JSON.parse(localEntry.data) : (localEntry.data || {});
+    } catch (e) {}
+    localData.prizeStatus = currentStatus;
+    localEntry.data = typeof localEntry.data === "string" ? JSON.stringify(localData) : localData;
+    allSubmissions[localIndex] = localEntry;
+    localStorage.setItem("soro_submissions", JSON.stringify(allSubmissions));
+  }
+
+  // Visual pulse feedback trigger
+  const cardEl = document.querySelector(`.admin-gallery-card[data-id="${submissionId}"]`);
+  if (cardEl) {
+    const btn = cardEl.querySelector(".prize-btn");
+    if (btn) {
+      btn.classList.add("active");
+      setTimeout(() => btn.classList.remove("active"), 500);
+    }
+  }
+
+  // Refresh 어드민 패널 화면
+  renderAdminKPIs();
+  renderAdminSubmissionsGallery();
+};
+
 // 10. Render Submissions (Redirect function to maintain API compatibility)
 function renderAdminSubmissionsTable() {
   renderAdminSubmissionsGallery();
@@ -5677,13 +5785,20 @@ function exportSubmissionsToCSV() {
     filtered = filtered.filter(entry => !!stars[entry.id]);
   }
 
+  // Prize filter
+  if (adminPrizeFilter === "waiting") {
+    filtered = filtered.filter(entry => !entry.data || entry.data.prizeStatus !== "delivered");
+  } else if (adminPrizeFilter === "delivered") {
+    filtered = filtered.filter(entry => entry.data && entry.data.prizeStatus === "delivered");
+  }
+
   if (filtered.length === 0) {
     showToast("조건에 맞는 심사 데이터가 없습니다.", "error");
     return;
   }
 
   let csvContent = "";
-  const headers = ["학년", "반", "번호", "이름", "공모전명", "작품URL", "상세내용/감상글"];
+  const headers = ["학년", "반", "번호", "이름", "공모전명", "작품URL", "상세내용/감상글", "사은품 지급"];
   csvContent += headers.map(h => `"${h}"`).join(",") + "\n";
 
   filtered.forEach(entry => {
@@ -5718,6 +5833,7 @@ function exportSubmissionsToCSV() {
       workUrl = "(로컬 백업 - 파일 URL 없음)";
     }
 
+    const isPrizeDelivered = entry.data && entry.data.prizeStatus === "delivered";
     const row = [
       entry.studentGrade || "",
       entry.studentClass || "",
@@ -5725,7 +5841,8 @@ function exportSubmissionsToCSV() {
       entry.studentName || "",
       contestTitle,
       workUrl,
-      descriptionText
+      descriptionText,
+      isPrizeDelivered ? "지급 완료" : "대기 중"
     ];
 
     csvContent += row.map(cell => `"${(cell || "").toString().replace(/"/g, '""').replace(/\r?\n/g, " ")}"`).join(",") + "\n";
@@ -5788,9 +5905,25 @@ window.deleteSubmissionByAdmin = async function(id, contestId) {
   }
 
   // Remove from local array
-  adminAllSubmissions = adminAllSubmissions.filter(s => s.id !== id);
-  const localSubs = JSON.parse(localStorage.getItem("soro_submissions") || "[]");
-  localStorage.setItem("soro_submissions", JSON.stringify(localSubs.filter(s => s.id !== id)));
+  const targetEntry = adminAllSubmissions.find(s => s.id === id);
+  if (targetEntry) {
+    const username = targetEntry.studentUsername;
+    const contestId = targetEntry.contestId;
+    
+    // Remove all submissions by this student for this contest
+    adminAllSubmissions = adminAllSubmissions.filter(s => 
+      !(s.studentUsername.toLowerCase() === username.toLowerCase() && s.contestId === contestId)
+    );
+    const localSubs = JSON.parse(localStorage.getItem("soro_submissions") || "[]");
+    localStorage.setItem("soro_submissions", JSON.stringify(localSubs.filter(s => 
+      !(s.studentUsername.toLowerCase() === username.toLowerCase() && s.contestId === contestId)
+    )));
+  } else {
+    // Fallback: remove only by ID
+    adminAllSubmissions = adminAllSubmissions.filter(s => s.id !== id);
+    const localSubs = JSON.parse(localStorage.getItem("soro_submissions") || "[]");
+    localStorage.setItem("soro_submissions", JSON.stringify(localSubs.filter(s => s.id !== id)));
+  }
 
   // Remove star if exists
   const stars = JSON.parse(localStorage.getItem("soro_admin_stars") || "{}");
@@ -5947,17 +6080,72 @@ function doPost(e) {
       response = { status: "success", data: results };
     }
     
-    // 5. 작품 접수 취소 액션 (Submissions 시트 행 삭제)
+    // 5. 작품 접수 취소 액션 (Submissions 시트 행 삭제, 중복 제거, 구글 드라이브 파일 함께 삭제)
     else if (requestData.action === "deleteSubmission") {
       var sheet = ss.getSheetByName("Submissions");
       var deleted = false;
       
       if (sheet) {
         var data = sheet.getDataRange().getValues();
-        for (var i = data.length - 1; i >= 1; i--) {
+        var targetUsername = "";
+        var targetContestId = "";
+        
+        // 1단계: 삭제 대상 ID의 StudentUsername과 ContestID를 조회합니다.
+        for (var i = 1; i < data.length; i++) {
           if (data[i][0] === requestData.id) {
-            sheet.deleteRow(i + 1);
-            deleted = true;
+            targetUsername = data[i][3];
+            targetContestId = data[i][1];
+            break;
+          }
+        }
+        
+        // 2단계: 일치하는 모든 행을 지우고, 해당 행들에 속한 구글 드라이브 파일도 함께 삭제(휴지통 이동)합니다.
+        if (targetUsername && targetContestId) {
+          for (var i = data.length - 1; i >= 1; i--) {
+            if (data[i][3] === targetUsername && data[i][1] === targetContestId) {
+              // 파일 ID 추출 및 삭제
+              try {
+                var entryData = {};
+                try { 
+                  entryData = JSON.parse(data[i][9]); 
+                } catch(e) {
+                  entryData = { image: data[i][9] };
+                }
+                var fileUrl = entryData.image || entryData.audio || "";
+                var fileId = extractFileIdFromUrl(fileUrl);
+                if (fileId) {
+                  DriveApp.getFileById(fileId).setTrashed(true);
+                }
+              } catch(fileErr) {
+                Logger.log("Failed to delete file from drive: " + fileErr.toString());
+              }
+              
+              sheet.deleteRow(i + 1);
+              deleted = true;
+            }
+          }
+        } else {
+          // Fallback: ID 일치 행만 개별 삭제
+          for (var i = data.length - 1; i >= 1; i--) {
+            if (data[i][0] === requestData.id) {
+              try {
+                var entryData = {};
+                try { 
+                  entryData = JSON.parse(data[i][9]); 
+                } catch(e) {
+                  entryData = { image: data[i][9] };
+                }
+                var fileUrl = entryData.image || entryData.audio || "";
+                var fileId = extractFileIdFromUrl(fileUrl);
+                if (fileId) {
+                  DriveApp.getFileById(fileId).setTrashed(true);
+                }
+              } catch(fileErr) {
+                Logger.log("Failed to delete file from drive: " + fileErr.toString());
+              }
+              sheet.deleteRow(i + 1);
+              deleted = true;
+            }
           }
         }
       }
@@ -5999,6 +6187,36 @@ function doPost(e) {
       }
       response = { status: "success", data: results };
     }
+
+    // 7. 사은품 지급 상태 실시간 업데이트 액션 (Submissions 시트)
+    else if (requestData.action === "updateSubmissionPrizeStatus") {
+      var sheet = ss.getSheetByName("Submissions");
+      var updated = false;
+      
+      if (sheet) {
+        var data = sheet.getDataRange().getValues();
+        for (var i = 1; i < data.length; i++) {
+          if (data[i][0] === requestData.id) {
+            var entryData = {};
+            try { 
+              entryData = JSON.parse(data[i][9]); 
+            } catch(e) {
+              entryData = { image: data[i][9] };
+            }
+            entryData.prizeStatus = requestData.prizeStatus;
+            sheet.getRange(i + 1, 10).setValue(JSON.stringify(entryData));
+            updated = true;
+            break;
+          }
+        }
+      }
+      
+      if (updated) {
+        response = { status: "success", message: "사은품 상태 업데이트 완료" };
+      } else {
+        response = { status: "error", message: "업데이트 대상을 찾을 수 없음" };
+      }
+    }
     
   } catch (error) {
     response = { status: "error", message: error.toString() };
@@ -6007,6 +6225,18 @@ function doPost(e) {
   // CORS 우회 응답 설정
   return ContentService.createTextOutput(JSON.stringify(response))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// URL에서 구글 드라이브 파일 ID를 추출하는 헬퍼 함수
+function extractFileIdFromUrl(url) {
+  if (!url) return null;
+  var id = "";
+  if (url.indexOf("id=") !== -1) {
+    id = url.split("id=")[1].split("&")[0];
+  } else if (url.indexOf("/file/d/") !== -1) {
+    id = url.split("/file/d/")[1].split("/")[0];
+  }
+  return id ? id.trim() : null;
 }
 
 // [헬퍼] Base64 데이터를 파싱하여 구글 드라이브에 이미지로 저장하는 함수

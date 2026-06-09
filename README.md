@@ -210,17 +210,72 @@ function doPost(e) {
       response = { status: "success", data: results };
     }
     
-    // 5. 작품 접수 취소 액션 (Submissions 시트 행 삭제)
+    // 5. 작품 접수 취소 액션 (Submissions 시트 행 삭제, 중복 제거, 구글 드라이브 파일 함께 삭제)
     else if (requestData.action === "deleteSubmission") {
       var sheet = ss.getSheetByName("Submissions");
       var deleted = false;
       
       if (sheet) {
         var data = sheet.getDataRange().getValues();
-        for (var i = data.length - 1; i >= 1; i--) {
+        var targetUsername = "";
+        var targetContestId = "";
+        
+        // 1단계: 삭제 대상 ID의 StudentUsername과 ContestID를 조회합니다.
+        for (var i = 1; i < data.length; i++) {
           if (data[i][0] === requestData.id) {
-            sheet.deleteRow(i + 1);
-            deleted = true;
+            targetUsername = data[i][3];
+            targetContestId = data[i][1];
+            break;
+          }
+        }
+        
+        // 2단계: 일치하는 모든 행을 지우고, 해당 행들에 속한 구글 드라이브 파일도 함께 삭제(휴지통 이동)합니다.
+        if (targetUsername && targetContestId) {
+          for (var i = data.length - 1; i >= 1; i--) {
+            if (data[i][3] === targetUsername && data[i][1] === targetContestId) {
+              // 파일 ID 추출 및 삭제
+              try {
+                var entryData = {};
+                try { 
+                  entryData = JSON.parse(data[i][9]); 
+                } catch(e) {
+                  entryData = { image: data[i][9] };
+                }
+                var fileUrl = entryData.image || entryData.audio || "";
+                var fileId = extractFileIdFromUrl(fileUrl);
+                if (fileId) {
+                  DriveApp.getFileById(fileId).setTrashed(true);
+                }
+              } catch(fileErr) {
+                Logger.log("Failed to delete file from drive: " + fileErr.toString());
+              }
+              
+              sheet.deleteRow(i + 1);
+              deleted = true;
+            }
+          }
+        } else {
+          // Fallback: ID 일치 행만 개별 삭제
+          for (var i = data.length - 1; i >= 1; i--) {
+            if (data[i][0] === requestData.id) {
+              try {
+                var entryData = {};
+                try { 
+                  entryData = JSON.parse(data[i][9]); 
+                } catch(e) {
+                  entryData = { image: data[i][9] };
+                }
+                var fileUrl = entryData.image || entryData.audio || "";
+                var fileId = extractFileIdFromUrl(fileUrl);
+                if (fileId) {
+                  DriveApp.getFileById(fileId).setTrashed(true);
+                }
+              } catch(fileErr) {
+                Logger.log("Failed to delete file from drive: " + fileErr.toString());
+              }
+              sheet.deleteRow(i + 1);
+              deleted = true;
+            }
           }
         }
       }
@@ -232,6 +287,36 @@ function doPost(e) {
       }
     }
     
+    // 6. 사은품 지급 상태 실시간 업데이트 액션 (Submissions 시트)
+    else if (requestData.action === "updateSubmissionPrizeStatus") {
+      var sheet = ss.getSheetByName("Submissions");
+      var updated = false;
+      
+      if (sheet) {
+        var data = sheet.getDataRange().getValues();
+        for (var i = 1; i < data.length; i++) {
+          if (data[i][0] === requestData.id) {
+            var entryData = {};
+            try { 
+              entryData = JSON.parse(data[i][9]); 
+            } catch(e) {
+              entryData = { image: data[i][9] };
+            }
+            entryData.prizeStatus = requestData.prizeStatus;
+            sheet.getRange(i + 1, 10).setValue(JSON.stringify(entryData));
+            updated = true;
+            break;
+          }
+        }
+      }
+      
+      if (updated) {
+        response = { status: "success", message: "사은품 상태 업데이트 완료" };
+      } else {
+        response = { status: "error", message: "업데이트 대상을 찾을 수 없음" };
+      }
+    }
+    
   } catch (error) {
     response = { status: "error", message: error.toString() };
   }
@@ -239,6 +324,18 @@ function doPost(e) {
   // CORS 우회 및 올바른 웹 응답 반환
   return ContentService.createTextOutput(JSON.stringify(response))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// URL에서 구글 드라이브 파일 ID를 추출하는 헬퍼 함수
+function extractFileIdFromUrl(url) {
+  if (!url) return null;
+  var id = "";
+  if (url.indexOf("id=") !== -1) {
+    id = url.split("id=")[1].split("&")[0];
+  } else if (url.indexOf("/file/d/") !== -1) {
+    id = url.split("/file/d/")[1].split("/")[0];
+  }
+  return id ? id.trim() : null;
 }
 ```
 

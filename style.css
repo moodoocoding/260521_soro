@@ -4037,4 +4037,69 @@ body.light-theme .xp-bar-container {
   .admin-btn-export { justify-content: center; }
 }
 
+/* ====================================================
+   CONTEST PRIZE TRACKING FEATURE STYLES
+   ==================================================== */
+
+/* Student View Prize Status Badges */
+.prize-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  border-radius: 4px;
+  margin-top: 8px;
+  width: fit-content;
+}
+.prize-badge.waiting {
+  background: rgba(223, 160, 64, 0.1);
+  border: 1px solid rgba(223, 160, 64, 0.3);
+  color: var(--status-pending);
+}
+.prize-badge.delivered {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #10b981;
+}
+
+/* Admin Gallery Card Prize Button Hover & Animations */
+.action-btn.prize-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  font-size: 0.95rem;
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.action-btn.prize-btn:hover {
+  transform: scale(1.2);
+}
+
+.action-btn.prize-btn.active {
+  animation: prizePulse 0.5s ease-out;
+}
+
+@keyframes prizePulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+
+/* Custom Active States for Prize Filter Chips */
+.admin-filter-chip.active[data-filter="waiting"] {
+  background: #dfa040 !important;
+  border-color: #dfa040 !important;
+  color: #000000 !important;
+}
+
+.admin-filter-chip.active[data-filter="delivered"] {
+  background: #10b981 !important;
+  border-color: #10b981 !important;
+  color: #ffffff !important;
+}
+
+
 

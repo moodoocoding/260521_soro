@@ -471,6 +471,12 @@
               <span class="kpi-value" id="admin-stat-starred" style="color: #fbbf24;">0</span><span class="kpi-unit">건</span>
             </div>
           </div>
+          <div class="admin-kpi-card" id="kpi-prizes-delivered">
+            <span class="kpi-label">사은품 지급 완료</span>
+            <div class="kpi-value-container">
+              <span class="kpi-value" id="admin-stat-prizes" style="color: #10b981;">0/0</span><span class="kpi-unit">건</span>
+            </div>
+          </div>
         </div>
 
         <div class="admin-sidebar-divider"></div>
@@ -519,6 +525,15 @@
             <div id="admin-star-filters" class="admin-filter-chips">
               <button class="admin-filter-chip active" data-filter="all">전체</button>
               <button class="admin-filter-chip" data-filter="starred">★ 심사 후보만</button>
+            </div>
+            
+            <div class="admin-filter-divider"></div>
+            
+            <!-- 사은품 수령 여부 필터 -->
+            <div id="admin-prize-filters" class="admin-filter-chips">
+              <button class="admin-filter-chip active" data-filter="all">전체 사은품</button>
+              <button class="admin-filter-chip" data-filter="waiting">🎁 대기중</button>
+              <button class="admin-filter-chip" data-filter="delivered">✅ 지급완료</button>
             </div>
             
             <div class="admin-filter-divider"></div>
