@@ -7,6 +7,11 @@ const GOOGLE_SHEET_API_URL = atob(SECURE_API_ENCODED);
 
 // contestLocks global object and fetch function
 let contestLocks = {};
+
+// ZepQuiz multi-round management state variables
+let currentActiveZepRound = "1"; // Currently active round for student submissions
+let adminSelectedZepRound = "zepquiz_1"; // Selected round in admin dashboard view
+
 async function fetchContestLocks() {
   if (!GOOGLE_SHEET_API_URL) return;
   try {
@@ -18,6 +23,19 @@ async function fetchContestLocks() {
     const result = await response.json();
     if (result.status === "success") {
       contestLocks = result.data || {};
+      if (result.activeRound) {
+        currentActiveZepRound = result.activeRound.toString();
+        // Sync adminSelectedZepRound initial state with current active round
+        adminSelectedZepRound = `zepquiz_${currentActiveZepRound}`;
+        const roundSelect = document.getElementById("admin-zep-round-select");
+        if (roundSelect) {
+          roundSelect.value = adminSelectedZepRound;
+        }
+        const activeLabel = document.getElementById("admin-zep-active-label");
+        if (activeLabel) {
+          activeLabel.textContent = `${currentActiveZepRound}회차`;
+        }
+      }
     }
   } catch (e) {
     console.error("Failed to fetch contest locks:", e);
@@ -63,8 +81,8 @@ const CONTESTS_DATA = [
     </svg>`
   },
   {
-    id: "zepquiz",
-    title: "저작권 퀴즈",
+    id: "zepquiz_1",
+    title: "저작권 퀴즈 (1회차)",
     month: 6,
     monthText: "6월",
     period: "2026. 6. 1.(월) ~ 2026. 6. 30.(화)",
@@ -77,6 +95,161 @@ const CONTESTS_DATA = [
       "제출물: 젭퀴즈를 다 푼 완료 화면 스크린샷",
       "특별 혜택: 학급 모든 친구가 제출할 경우 과자 지급",
       "젭퀴즈 링크: <a href=\"https://quiz.zep.us/play/R53q9r\" target=\"_blank\" class=\"contest-link\" onclick=\"alert('⚠️ 반드시 학교 구글 아이디로 로그인한 후 문제를 풀어야 제출이 인정됩니다!'); alert('📸 문제를 다 푼 후 완료 화면 스크린샷을 찍어서 제출해 주세요!');\">zepquiz 바로가기 (https://quiz.zep.us/play/R53q9r)</a>"
+    ],
+    evaluationCriteria: [
+      { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "50%" },
+      { category: "본인 인증", desc: "완료 화면에서 본인의 참여 내역을 확인할 수 있는 정보를 식별합니다.", weight: "30%" },
+      { category: "성실성", desc: "기간 내 퀴즈를 누락 없이 제출했는지 평가합니다.", weight: "20%" }
+    ],
+    submissionType: "image",
+    inputLabel: "퀴즈 완료 스크린샷 캡처본",
+    placeholder: "PNG, JPG 형식의 이미지 파일 (최대 5MB)",
+    icon: `<svg class="card-visual-svg" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="10" y="6" width="44" height="52" rx="5" />
+      <path d="M20 18h24M20 28h24M20 38h14" />
+      <path d="M40 40l4 4 8-8" stroke="#10b981" />
+      <circle cx="32" cy="18" r="4" fill="currentColor" fill-opacity="0.1" />
+    </svg>`
+  },
+  {
+    id: "zepquiz_2",
+    title: "저작권 퀴즈 (2회차)",
+    month: 7,
+    monthText: "7월",
+    period: "추후 안내 예정",
+    summary: "zepquiz에 접속하여 저작권 문제를 풀고 완료 스크린샷을 찍어서 업로드하세요!",
+    description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 최종 완료 화면(점수 또는 완료 문구가 보이는 화면)을 캡처하여 증빙 자료로 업로드해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
+    rules: [
+      "참가 대상: 본교 3~6학년 학생 누구나",
+      "퀴즈 내용: 저작권",
+      "제한 사항: <strong style=\"color: #e63946;\">학교 구글 아이디로 로그인하여 문제 풀 것 (★반드시 로그인 후 풀이에 응해야 인정됩니다!)</strong>",
+      "제출물: 젭퀴즈를 다 푼 완료 화면 스크린샷",
+      "특별 혜택: 학급 모든 친구가 제출할 경우 과자 지급",
+      "젭퀴즈 링크: <span class=\"contest-link-disabled\" style=\"color: #808088; font-style: italic;\">젭퀴즈 2회차 링크는 아직 등록되지 않았습니다 (준비 중).</span>"
+    ],
+    evaluationCriteria: [
+      { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "50%" },
+      { category: "본인 인증", desc: "완료 화면에서 본인의 참여 내역을 확인할 수 있는 정보를 식별합니다.", weight: "30%" },
+      { category: "성실성", desc: "기간 내 퀴즈를 누락 없이 제출했는지 평가합니다.", weight: "20%" }
+    ],
+    submissionType: "image",
+    inputLabel: "퀴즈 완료 스크린샷 캡처본",
+    placeholder: "PNG, JPG 형식의 이미지 파일 (최대 5MB)",
+    icon: `<svg class="card-visual-svg" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="10" y="6" width="44" height="52" rx="5" />
+      <path d="M20 18h24M20 28h24M20 38h14" />
+      <path d="M40 40l4 4 8-8" stroke="#10b981" />
+      <circle cx="32" cy="18" r="4" fill="currentColor" fill-opacity="0.1" />
+    </svg>`
+  },
+  {
+    id: "zepquiz_3",
+    title: "저작권 퀴즈 (3회차)",
+    month: 9,
+    monthText: "9월",
+    period: "추후 안내 예정",
+    summary: "zepquiz에 접속하여 저작권 문제를 풀고 완료 스크린샷을 찍어서 업로드하세요!",
+    description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 최종 완료 화면(점수 또는 완료 문구가 보이는 화면)을 캡처하여 증빙 자료로 업로드해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
+    rules: [
+      "참가 대상: 본교 3~6학년 학생 누구나",
+      "퀴즈 내용: 저작권",
+      "제한 사항: <strong style=\"color: #e63946;\">학교 구글 아이디로 로그인하여 문제 풀 것 (★반드시 로그인 후 풀이에 응해야 인정됩니다!)</strong>",
+      "제출물: 젭퀴즈를 다 푼 완료 화면 스크린샷",
+      "특별 혜택: 학급 모든 친구가 제출할 경우 과자 지급",
+      "젭퀴즈 링크: <span class=\"contest-link-disabled\" style=\"color: #808088; font-style: italic;\">젭퀴즈 3회차 링크는 아직 등록되지 않았습니다 (준비 중).</span>"
+    ],
+    evaluationCriteria: [
+      { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "50%" },
+      { category: "본인 인증", desc: "완료 화면에서 본인의 참여 내역을 확인할 수 있는 정보를 식별합니다.", weight: "30%" },
+      { category: "성실성", desc: "기간 내 퀴즈를 누락 없이 제출했는지 평가합니다.", weight: "20%" }
+    ],
+    submissionType: "image",
+    inputLabel: "퀴즈 완료 스크린샷 캡처본",
+    placeholder: "PNG, JPG 형식의 이미지 파일 (최대 5MB)",
+    icon: `<svg class="card-visual-svg" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="10" y="6" width="44" height="52" rx="5" />
+      <path d="M20 18h24M20 28h24M20 38h14" />
+      <path d="M40 40l4 4 8-8" stroke="#10b981" />
+      <circle cx="32" cy="18" r="4" fill="currentColor" fill-opacity="0.1" />
+    </svg>`
+  },
+  {
+    id: "zepquiz_4",
+    title: "저작권 퀴즈 (4회차)",
+    month: 10,
+    monthText: "10월",
+    period: "추후 안내 예정",
+    summary: "zepquiz에 접속하여 저작권 문제를 풀고 완료 스크린샷을 찍어서 업로드하세요!",
+    description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 최종 완료 화면(점수 또는 완료 문구가 보이는 화면)을 캡처하여 증빙 자료로 업로드해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
+    rules: [
+      "참가 대상: 본교 3~6학년 학생 누구나",
+      "퀴즈 내용: 저작권",
+      "제한 사항: <strong style=\"color: #e63946;\">학교 구글 아이디로 로그인하여 문제 풀 것 (★반드시 로그인 후 풀이에 응해야 인정됩니다!)</strong>",
+      "제출물: 젭퀴즈를 다 푼 완료 화면 스크린샷",
+      "특별 혜택: 학급 모든 친구가 제출할 경우 과자 지급",
+      "젭퀴즈 링크: <span class=\"contest-link-disabled\" style=\"color: #808088; font-style: italic;\">젭퀴즈 4회차 링크는 아직 등록되지 않았습니다 (준비 중).</span>"
+    ],
+    evaluationCriteria: [
+      { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "50%" },
+      { category: "본인 인증", desc: "완료 화면에서 본인의 참여 내역을 확인할 수 있는 정보를 식별합니다.", weight: "30%" },
+      { category: "성실성", desc: "기간 내 퀴즈를 누락 없이 제출했는지 평가합니다.", weight: "20%" }
+    ],
+    submissionType: "image",
+    inputLabel: "퀴즈 완료 스크린샷 캡처본",
+    placeholder: "PNG, JPG 형식의 이미지 파일 (최대 5MB)",
+    icon: `<svg class="card-visual-svg" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="10" y="6" width="44" height="52" rx="5" />
+      <path d="M20 18h24M20 28h24M20 38h14" />
+      <path d="M40 40l4 4 8-8" stroke="#10b981" />
+      <circle cx="32" cy="18" r="4" fill="currentColor" fill-opacity="0.1" />
+    </svg>`
+  },
+  {
+    id: "zepquiz_5",
+    title: "저작권 퀴즈 (5회차)",
+    month: 11,
+    monthText: "11월",
+    period: "추후 안내 예정",
+    summary: "zepquiz에 접속하여 저작권 문제를 풀고 완료 스크린샷을 찍어서 업로드하세요!",
+    description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 최종 완료 화면(점수 또는 완료 문구가 보이는 화면)을 캡처하여 증빙 자료로 업로드해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
+    rules: [
+      "참가 대상: 본교 3~6학년 학생 누구나",
+      "퀴즈 내용: 저작권",
+      "제한 사항: <strong style=\"color: #e63946;\">학교 구글 아이디로 로그인하여 문제 풀 것 (★반드시 로그인 후 풀이에 응해야 인정됩니다!)</strong>",
+      "제출물: 젭퀴즈를 다 푼 완료 화면 스크린샷",
+      "특별 혜택: 학급 모든 친구가 제출할 경우 과자 지급",
+      "젭퀴즈 링크: <span class=\"contest-link-disabled\" style=\"color: #808088; font-style: italic;\">젭퀴즈 5회차 링크는 아직 등록되지 않았습니다 (준비 중).</span>"
+    ],
+    evaluationCriteria: [
+      { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "50%" },
+      { category: "본인 인증", desc: "완료 화면에서 본인의 참여 내역을 확인할 수 있는 정보를 식별합니다.", weight: "30%" },
+      { category: "성실성", desc: "기간 내 퀴즈를 누락 없이 제출했는지 평가합니다.", weight: "20%" }
+    ],
+    submissionType: "image",
+    inputLabel: "퀴즈 완료 스크린샷 캡처본",
+    placeholder: "PNG, JPG 형식의 이미지 파일 (최대 5MB)",
+    icon: `<svg class="card-visual-svg" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="10" y="6" width="44" height="52" rx="5" />
+      <path d="M20 18h24M20 28h24M20 38h14" />
+      <path d="M40 40l4 4 8-8" stroke="#10b981" />
+      <circle cx="32" cy="18" r="4" fill="currentColor" fill-opacity="0.1" />
+    </svg>`
+  },
+  {
+    id: "zepquiz_6",
+    title: "저작권 퀴즈 (6회차)",
+    month: 12,
+    monthText: "12월",
+    period: "추후 안내 예정",
+    summary: "zepquiz에 접속하여 저작권 문제를 풀고 완료 스크린샷을 찍어서 업로드하세요!",
+    description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 최종 완료 화면(점수 또는 완료 문구가 보이는 화면)을 캡처하여 증빙 자료로 업로드해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
+    rules: [
+      "참가 대상: 본교 3~6학년 학생 누구나",
+      "퀴즈 내용: 저작권",
+      "제한 사항: <strong style=\"color: #e63946;\">학교 구글 아이디로 로그인하여 문제 풀 것 (★반드시 로그인 후 풀이에 응해야 인정됩니다!)</strong>",
+      "제출물: 젭퀴즈를 다 푼 완료 화면 스크린샷",
+      "특별 혜택: 학급 모든 친구가 제출할 경우 과자 지급",
+      "젭퀴즈 링크: <span class=\"contest-link-disabled\" style=\"color: #808088; font-style: italic;\">젭퀴즈 6회차 링크는 아직 등록되지 않았습니다 (준비 중).</span>"
     ],
     evaluationCriteria: [
       { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "50%" },
@@ -465,13 +638,38 @@ const GALLERY_2025_DATA = RAW_2025_KEYRING_DATA.trim().split("\n").map(line => {
 // STATE MANAGEMENT & USER SESSION CONFIGURATION
 // ====================================================
 let currentVirtualMonth = 6;
-const FORCE_ACTIVE_CONTESTS = ["keyring", "zepquiz"];
+const FORCE_ACTIVE_CONTESTS = ["keyring"];
 
 function getContestStatus(contestOrMonth) {
   const contestId = typeof contestOrMonth === "object" ? contestOrMonth.id : (typeof contestOrMonth === "string" ? contestOrMonth : null);
-  if (contestId === "keyring" || contestId === "zepquiz" || contestOrMonth === "keyring" || contestOrMonth === "zepquiz") {
+  if (contestId === "keyring" || contestOrMonth === "keyring") {
     return "active";
   }
+  
+  if (contestId && contestId.startsWith("zepquiz_")) {
+    const roundNum = parseInt(contestId.substring(8), 10);
+    const activeRoundNum = parseInt(currentActiveZepRound, 10);
+    if (roundNum === activeRoundNum) {
+      return "active";
+    } else if (roundNum < activeRoundNum) {
+      return "closed";
+    } else {
+      return "pending";
+    }
+  }
+  
+  if (contestOrMonth && typeof contestOrMonth === "string" && contestOrMonth.startsWith("zepquiz_")) {
+    const roundNum = parseInt(contestOrMonth.substring(8), 10);
+    const activeRoundNum = parseInt(currentActiveZepRound, 10);
+    if (roundNum === activeRoundNum) {
+      return "active";
+    } else if (roundNum < activeRoundNum) {
+      return "closed";
+    } else {
+      return "pending";
+    }
+  }
+  
   return "closed";
 }
 
@@ -1004,13 +1202,18 @@ function renderContestGrid() {
     card.className = "contest-card" + (status === "active" ? " active-contest" : "");
     card.setAttribute("data-id", contest.id);
 
+    let displayTitle = contest.title;
+    if (contest.id === "zepquiz") {
+      displayTitle = `${contest.title} (${currentActiveZepRound}회차)`;
+    }
+
     card.innerHTML = `
       <div class="card-top">
         <div class="card-meta">
           <span class="badge">${contest.monthText}</span>
           <span class="status-badge ${statusClass}">${statusLabel}</span>
         </div>
-        <h3 class="card-title">${contest.title}</h3>
+        <h3 class="card-title">${displayTitle}</h3>
         <p class="card-desc">${contest.summary}</p>
       </div>
       
@@ -1890,7 +2093,7 @@ function openContestDetails(contestId) {
   const criteriaListContainer = document.getElementById("criteria-cards-list");
   criteriaListContainer.innerHTML = "";
   
-  if (contest.id !== "zepquiz" && contest.evaluationCriteria && contest.evaluationCriteria.length > 0) {
+  if (!contest.id.startsWith("zepquiz") && contest.evaluationCriteria && contest.evaluationCriteria.length > 0) {
     const tabCriteria = document.getElementById("drawer-tab-criteria");
     if (tabCriteria) tabCriteria.style.display = "flex";
     contest.evaluationCriteria.forEach(item => {
@@ -1912,7 +2115,18 @@ function openContestDetails(contestId) {
   }
 
   const status = getContestStatus(contest);
-  document.getElementById("form-contest-id").value = contest.id;
+  const targetId = contest.id;
+  document.getElementById("form-contest-id").value = targetId;
+
+  // Zepquiz side panel size extension
+  const contestDrawer = document.getElementById("contest-drawer");
+  if (contestDrawer) {
+    if (contest.id.startsWith("zepquiz")) {
+      contestDrawer.classList.add("zepquiz-drawer");
+    } else {
+      contestDrawer.classList.remove("zepquiz-drawer");
+    }
+  }
 
   if (status === "active") {
     drawerStatus.textContent = "접수 진행 중 (Active)";
@@ -1933,7 +2147,7 @@ function openContestDetails(contestId) {
   // Show 3rd tab for all contests (hide for zepquiz as requested)
   const tabGallery = document.getElementById("drawer-tab-gallery");
   if (tabGallery) {
-    if (contest.id === "zepquiz") {
+    if (contest.id.startsWith("zepquiz")) {
       tabGallery.style.display = "none";
     } else {
       tabGallery.style.display = "flex";
@@ -5632,8 +5846,8 @@ function renderAdminSubmissionsGallery() {
   let html = "";
   filtered.forEach(entry => {
     const isStarred = entry.data && entry.data.isStarred === true;
-    const color = contestColors[entry.contestId] || "#ffffff";
-    const emoji = contestEmojis[entry.contestId] || "🎨";
+    const color = contestColors[entry.contestId] || (entry.contestId && entry.contestId.startsWith("zepquiz") ? "#f59e0b" : "#ffffff");
+    const emoji = contestEmojis[entry.contestId] || (entry.contestId && entry.contestId.startsWith("zepquiz") ? "🍪" : "🎨");
     
     // Resolve Image URL & Convert Google Drive Links (Fix broken alt image issue)
     let imageUrl = entry.data && entry.data.image ? entry.data.image : "";
@@ -6106,6 +6320,60 @@ window.setAdminTabMode = function(mode) {
   }
 };
 
+// 젭퀴즈 회차 전환 핸들러
+window.handleZepRoundChange = function() {
+  const roundSelect = document.getElementById("admin-zep-round-select");
+  if (!roundSelect) return;
+  adminSelectedZepRound = roundSelect.value;
+  fetchZepQuizDataAndRender();
+};
+
+// 선택한 회차를 활성 회차로 스프레드시트에 영구 저장
+window.setAsActiveZepRound = async function() {
+  const roundSelect = document.getElementById("admin-zep-round-select");
+  if (!roundSelect) return;
+  
+  const selectedRound = roundSelect.value;
+  const roundNum = selectedRound.substring(8); // 'zepquiz_' 뒤의 숫자
+  
+  showToast(`${roundNum}회차를 학생 활성 회차로 설정하는 중...`, "info");
+  
+  if (GOOGLE_SHEET_API_URL) {
+    try {
+      const response = await fetch(GOOGLE_SHEET_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: JSON.stringify({
+          action: "updateActiveZepRound",
+          activeRound: roundNum
+        })
+      });
+      const result = await response.json();
+      if (result.status === "success") {
+        currentActiveZepRound = roundNum.toString();
+        
+        // UI 라벨 동기화
+        const activeLabel = document.getElementById("admin-zep-active-label");
+        if (activeLabel) {
+          activeLabel.textContent = `${currentActiveZepRound}회차`;
+        }
+        
+        // 학생 카드 그리드 새로 렌더링
+        renderContestGrid();
+        
+        showToast(`${roundNum}회차 젭퀴즈가 활성 회차로 설정되었습니다!`, "success");
+      } else {
+        showToast("설정 실패: " + result.message, "error");
+      }
+    } catch (e) {
+      console.error(e);
+      showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+    }
+  } else {
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+  }
+};
+
 // 젭퀴즈 데이터 로드 및 렌더러
 async function fetchZepQuizDataAndRender() {
   const classGrid = document.getElementById("admin-zep-class-grid");
@@ -6133,7 +6401,7 @@ async function fetchZepQuizDataAndRender() {
     const response = await fetch(GOOGLE_SHEET_API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: JSON.stringify({ action: "getZepQuizStats", roundId: "zepquiz" })
+      body: JSON.stringify({ action: "getZepQuizStats", roundId: adminSelectedZepRound })
     });
     
     const result = await response.json();
@@ -6819,6 +7087,7 @@ function doPost(e) {
     else if (requestData.action === "getContestLocks") {
       var sheet = ss.getSheetByName("Settings");
       var locks = {};
+      var activeRound = "1"; // 기본 활성 회차는 1회차
       if (sheet) {
         var data = sheet.getDataRange().getValues();
         var startIndex = getStartIndex(data, "Key");
@@ -6827,10 +7096,38 @@ function doPost(e) {
           if (key.indexOf("contest_lock_") === 0) {
             var contestId = key.substring(13);
             locks[contestId] = (data[i][1] === "true" || data[i][1] === true);
+          } else if (key === "zepquiz_active_round") {
+            activeRound = data[i][1].toString();
           }
         }
       }
-      response = { status: "success", data: locks };
+      response = { status: "success", data: locks, activeRound: activeRound };
+    }
+
+    // 8-1. 젭퀴즈 활성 회차 업데이트 액션 (Settings 시트)
+    else if (requestData.action === "updateActiveZepRound") {
+      var sheet = ss.getSheetByName("Settings");
+      if (!sheet) {
+        sheet = ss.insertSheet("Settings");
+        sheet.appendRow(["Key", "Value"]);
+      }
+      var activeRound = requestData.activeRound.toString();
+      var data = sheet.getDataRange().getValues();
+      var foundIndex = -1;
+      var startIndex = getStartIndex(data, "Key");
+      for (var i = startIndex; i < data.length; i++) {
+        if (data[i][0] === "zepquiz_active_round") {
+          foundIndex = i;
+          break;
+        }
+      }
+      
+      if (foundIndex !== -1) {
+        sheet.getRange(foundIndex + 1, 2).setValue(activeRound);
+      } else {
+        sheet.appendRow(["zepquiz_active_round", activeRound]);
+      }
+      response = { status: "success", message: "활성 회차 설정 완료" };
     }
 
     // 9. 공모전 잠금 상태 업데이트 액션 (Settings 시트)

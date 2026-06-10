@@ -674,6 +674,31 @@
 
         <!-- 3-1. 젭퀴즈 메인 영역 (기본 숨김) -->
         <div id="admin-zepquiz-main-area" style="display: none; padding: 16px; overflow-y: auto; height: calc(100% - 70px);">
+          <!-- 젭퀴즈 회차 관리 및 조회 컨트롤 바 -->
+          <div class="admin-zepquiz-control-bar" style="display: flex; justify-content: space-between; align-items: center; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 12px 18px; margin-bottom: 20px; gap: 12px; flex-wrap: wrap;">
+            <!-- 좌측: 조회 회차 선택기 -->
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 0.8rem; font-weight: 800; color: var(--text-secondary);">조회 회차 선택:</span>
+              <select id="admin-zep-round-select" onchange="handleZepRoundChange()" style="background: rgba(20, 20, 22, 0.8); border: 1px solid rgba(255, 255, 255, 0.15); color: white; border-radius: 6px; padding: 6px 12px; font-size: 0.8rem; font-weight: 800; cursor: pointer; outline: none; transition: all 0.2s;">
+                <option value="zepquiz_1">젭퀴즈 1회차</option>
+                <option value="zepquiz_2">젭퀴즈 2회차</option>
+                <option value="zepquiz_3">젭퀴즈 3회차</option>
+                <option value="zepquiz_4">젭퀴즈 4회차</option>
+                <option value="zepquiz_5">젭퀴즈 5회차</option>
+                <option value="zepquiz_6">젭퀴즈 6회차</option>
+              </select>
+            </div>
+            
+            <!-- 우측: 현재 활성 회차 설정 -->
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <span style="font-size: 0.8rem; font-weight: 800; color: var(--text-secondary);">학생 접수 중인 회차:</span>
+              <span id="admin-zep-active-label" style="font-size: 0.8rem; font-weight: 800; color: #22c55e; background: rgba(34, 197, 94, 0.1); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(34, 197, 94, 0.2);">1회차</span>
+              <button onclick="setAsActiveZepRound()" style="padding: 6px 14px; font-size: 0.75rem; font-weight: 800; border-radius: 6px; cursor: pointer; background: #3b82f6; border: none; color: white; transition: background 0.2s;">
+                선택한 회차를 접수 중으로 설정
+              </button>
+            </div>
+          </div>
+
           <!-- 3-3. 학급별 달성 카드 그리드 -->
           <div id="admin-zep-class-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px;">
             <!-- JS로 동적 학급 카드 렌더링 -->
