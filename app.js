@@ -1185,6 +1185,10 @@ function renderContestGrid() {
   let activeCount = 0;
 
   CONTESTS_DATA.forEach(contest => {
+    // 젭퀴즈 2~6회차 카드는 메인 그리드에서 렌더링하지 않고 1회차만 남김
+    if (contest.id.startsWith("zepquiz_") && contest.id !== "zepquiz_1") {
+      return;
+    }
     const status = getContestStatus(contest);
     let statusClass = "status-pending";
     let statusLabel = "접수 대기";
@@ -4981,8 +4985,10 @@ async function executeLoggedInLookup() {
       completedContests.add(entry.contestId);
     });
     
-    const completedCount = completedContests.size;
-    const totalCount = CONTESTS_DATA.length;
+    // 젭퀴즈 2~6회차는 미션 레벨 목록에서 제외
+    const visibleContests = CONTESTS_DATA.filter(contest => !contest.id.startsWith("zepquiz_") || contest.id === "zepquiz_1");
+    const completedCount = Array.from(completedContests).filter(id => !id.startsWith("zepquiz_") || id === "zepquiz_1").length;
+    const totalCount = visibleContests.length;
     const progressPercent = Math.round((completedCount / totalCount) * 100);
 
     const levels = [
@@ -4992,13 +4998,13 @@ async function executeLoggedInLookup() {
       { title: "창작 탐험가 🗺️", desc: "세 개의 미션 클리어! 새로운 한계를 뛰어넘어 창작의 진정한 묘미를 알아가는 중입니다.", icon: "🗺️" },
       { title: "아이디어 발전기 ⚡", desc: "네 개의 미션 클리어! 반짝이는 아이디어가 쉴 새 없이 샘솟는 학급 대표 창의력 대장!", icon: "⚡" },
       { title: "디지털 마스터 🎓", desc: "다섯 개의 미션 완료! 다양한 디지털 창작 도구를 완벽에 가깝게 다루는 디지털 마스터 수준입니다.", icon: "🎓" },
-      { title: "전설의 크리에이터 🏆", desc: "경배하라! 6개의 모든 공모전 미션을 완벽 정복한 청주소로초 최고의 크리에이티브 히어로!", icon: "🏆" }
+      { title: "전설의 크리에이터 🏆", desc: "경배하라! 모든 공모전 미션을 완벽 정복한 청주소로초 최고의 크리에이티브 히어로!", icon: "🏆" }
     ];
 
     const currentLevelInfo = levels[completedCount] || levels[0];
     const nextLevelInfo = levels[completedCount + 1] || null;
 
-    let stageBadgesHtml = CONTESTS_DATA.map(contest => {
+    let stageBadgesHtml = visibleContests.map(contest => {
       const isCompleted = completedContests.has(contest.id);
       return `
         <div class="stage-badge ${isCompleted ? 'completed' : 'locked'}">
