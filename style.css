@@ -4290,5 +4290,20 @@ body[data-admin-mode="zepquiz"] .zepquiz-gauge-track {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
+/* Custom Alert Modal Transitions */
+@keyframes scaleUp {
+  from { transform: scale(0.9) translateY(12px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
+@keyframes scaleDown {
+  from { transform: scale(1) translateY(0); opacity: 1; }
+  to { transform: scale(0.9) translateY(12px); opacity: 0; }
+}
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+
 
 

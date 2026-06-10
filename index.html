@@ -512,7 +512,7 @@
             </div>
           </div>
           <div class="admin-kpi-card" id="kpi-zep-classes">
-            <span class="kpi-label">100% 완료 학급</span>
+            <span class="kpi-label">지급 대상 학급 (80%↑)</span>
             <div class="kpi-value-container">
               <span class="kpi-value" id="admin-zep-stat-classes" style="color: #f59e0b;">0/0</span><span class="kpi-unit">개반</span>
             </div>
@@ -558,16 +558,9 @@
           <div style="position: relative; flex-grow: 1;">
             <div style="display: flex; align-items: center; gap: 12px;">
               <h1 class="admin-main-title">공모전 데이터 센터</h1>
-              <button id="admin-panel-toggle-btn" class="admin-panel-toggle-btn" onclick="toggleAdminContestPanel()" title="공모전 제어 패널 열기/닫기">
-                ⚙️ 공모전 제어
-              </button>
             </div>
-            <p class="admin-main-subtitle">공모전 시작/마감 제어 및 심사 자료 통합 관리</p>
-            
-            <!-- 공모전 제어 카드 패널 (플로팅 2열 그리드) -->
-            <div id="admin-contest-cards" class="admin-contest-grid collapsed">
-              <!-- JS에서 동적 렌더링 -->
-            </div>
+            <p class="admin-main-subtitle">제출 작품 및 심사 자료 통합 관리</p>
+
           </div>
           <button class="admin-drawer-close-btn" id="admin-drawer-close" aria-label="닫기">×</button>
         </div>
@@ -594,6 +587,19 @@
                   <button class="admin-filter-chip" data-filter="delivered">✅ 지급완료</button>
                 </div>
                 
+                <div class="admin-filter-divider"></div>
+
+                <!-- 공모전 필터 -->
+                <div id="admin-contest-filters" class="admin-filter-chips">
+                  <button class="admin-filter-chip active" data-filter="all">전체 공모전</button>
+                  <button class="admin-filter-chip" data-filter="keyring">🔑 키링</button>
+                  <button class="admin-filter-chip" data-filter="cuttoon">📰 컷툰</button>
+                  <button class="admin-filter-chip" data-filter="library">📚 도서관</button>
+                  <button class="admin-filter-chip" data-filter="transcription">✍️ 필사</button>
+                  <button class="admin-filter-chip" data-filter="pixelart">🎮 픽셀아트</button>
+                  <button class="admin-filter-chip" data-filter="sound_album">🎵 사운드</button>
+                </div>
+
                 <div class="admin-filter-divider"></div>
 
                 <!-- 아코디언 토글 버튼 -->
@@ -697,6 +703,6 @@
 
 
   <!-- Main JavaScript -->
-  <script src="app.js?v=2.3.7"></script>
+  <script src="app.js?v=2.5.0"></script>
 </body>
 </html>

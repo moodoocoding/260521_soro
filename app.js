@@ -468,20 +468,8 @@ let currentVirtualMonth = 6;
 const FORCE_ACTIVE_CONTESTS = ["keyring", "zepquiz"];
 
 function getContestStatus(contestOrMonth) {
-  // If contestOrMonth is an object, extract month and id
-  const contestMonth = typeof contestOrMonth === "object" ? contestOrMonth.month : (typeof contestOrMonth === "number" ? contestOrMonth : null);
   const contestId = typeof contestOrMonth === "object" ? contestOrMonth.id : (typeof contestOrMonth === "string" ? contestOrMonth : null);
-
-  // 1. 관리자 수동 제어 우선 검사 (Locks 설정이 명시적으로 존재한다면 절대적 우선순위)
-  if (contestId) {
-    const locks = contestLocks;
-    if (locks[contestId] !== undefined) {
-      return locks[contestId] === true ? "closed" : "active";
-    }
-  }
-
-  // 키링 공모전 및 저작권 퀴즈(6월)만 활성화하고 나머지는 모두 접수 마감(closed)으로 변경
-  if (contestId === "keyring" || contestId === "zepquiz" || contestOrMonth === "keyring" || contestOrMonth === "zepquiz" || contestMonth === 6) {
+  if (contestId === "keyring" || contestId === "zepquiz" || contestOrMonth === "keyring" || contestOrMonth === "zepquiz") {
     return "active";
   }
   return "closed";
@@ -808,20 +796,9 @@ async function handleResetPassword(grade, classNum, number, name, newPassword) {
         return false;
       }
 
-      // 원격 성공 시, 로컬스토리지 백업 데이터 마이그레이션 및 자동 로그인 처리
       const loggedUser = { userKey, grade, classNum, number, name };
       currentUser = loggedUser;
       localStorage.setItem("soro_current_user", JSON.stringify(loggedUser));
-
-      // 기기 로컬스토리지의 백업 사용자 목록 정보도 갱신
-      const users = JSON.parse(localStorage.getItem("soro_users") || "[]");
-      const idx = users.findIndex(u => u.userKey === userKey);
-      if (idx !== -1) {
-        users[idx].password = hashedPassword;
-      } else {
-        users.push({ userKey, grade, classNum, number, name, password: hashedPassword });
-      }
-      localStorage.setItem("soro_users", JSON.stringify(users));
 
       updateUIForLoggedInState();
       updateLiveCounters();
@@ -831,31 +808,13 @@ async function handleResetPassword(grade, classNum, number, name, newPassword) {
       return true;
     } catch (error) {
       console.error(error);
-      showToast("원격 구글 서버 접속이 원활하지 않습니다. 로컬 초기화를 시도합니다.", "error");
+      showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+      return false;
     }
-  }
-
-  // 2. Fallback Local Mode
-  const users = JSON.parse(localStorage.getItem("soro_users") || "[]");
-  const idx = users.findIndex(u => u.userKey === userKey);
-  if (idx === -1) {
-    showToast("입력하신 정보와 일치하는 학생 계정이 존재하지 않습니다.", "error");
+  } else {
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
     return false;
   }
-
-  users[idx].password = hashedPassword;
-  localStorage.setItem("soro_users", JSON.stringify(users));
-
-  const loggedUser = { userKey, grade, classNum, number, name };
-  currentUser = loggedUser;
-  localStorage.setItem("soro_current_user", JSON.stringify(loggedUser));
-
-  updateUIForLoggedInState();
-  updateLiveCounters();
-  closeAuthDrawer();
-  if (activeContest) openContestDetails(activeContest.id);
-  showToast(`비밀번호 재설정 및 자동 로그인이 완료되었습니다! 🎉`, "success");
-  return true;
 }
 
 // REST API or Local Login
@@ -1149,34 +1108,10 @@ async function getLibrarySubmissions(gradeFilter = "all", sortBy = "newest", sea
       const result = await response.json();
       if (result.status === "success" && Array.isArray(result.data)) {
         submissions = result.data;
-        // Clean up localStorage: remove any local submissions for this contestId that are NOT in the remote data
-        const remoteIds = new Set(submissions.map(s => s.id));
-        const allSubmissions = JSON.parse(localStorage.getItem("soro_submissions") || "[]");
-        const cleanedSubmissions = allSubmissions.filter(entry => {
-          if (entry.contestId !== contestId) return true;
-          return remoteIds.has(entry.id);
-        });
-        localStorage.setItem("soro_submissions", JSON.stringify(cleanedSubmissions));
       }
     } catch (e) {
-      console.warn(`Failed to fetch ${contestId} submissions remotely, using local backup:`, e);
+      console.error(`Failed to fetch ${contestId} submissions remotely:`, e);
     }
-  }
-
-  // 2. Fetch local storage entries to merge (or fallback)
-  const localSubmissions = JSON.parse(localStorage.getItem("soro_submissions") || "[]")
-                             .filter(entry => entry.contestId === contestId);
-
-  if (submissions.length === 0) {
-    submissions = localSubmissions;
-  } else {
-    // Merge local entries that are not yet in the remote submissions (avoid duplicates by id)
-    const remoteIds = new Set(submissions.map(s => s.id));
-    localSubmissions.forEach(localEntry => {
-      if (!remoteIds.has(localEntry.id)) {
-        submissions.push(localEntry);
-      }
-    });
   }
 
   // Normalize entry.data (Ensure it is parsed into an Object if it is a JSON string from Google Sheets API)
@@ -1910,8 +1845,7 @@ function switchDrawerTab(tabName) {
 
 function openContestDetails(contestId) {
   // Check for contest locks (managed by administrator)
-  const locks = contestLocks;
-  if (locks[contestId]) {
+  if (getContestStatus(contestId) === "closed") {
     showToast(`해당 공모전은 접수가 마감되었습니다. 🔒`, "error");
     return;
   }
@@ -2174,12 +2108,7 @@ async function checkAndRenderSubmissionArea(contest) {
     }
   }
 
-  if (!GOOGLE_SHEET_API_URL || mySubmissions.length === 0) {
-    const allSubmissions = JSON.parse(localStorage.getItem("soro_submissions") || "[]");
-    mySubmissions = allSubmissions.filter(entry =>
-      entry.studentUsername.toLowerCase() === currentUser.userKey.toLowerCase()
-    );
-  }
+
 
   // 로더 제거
   const activeLoader = document.getElementById("submission-loading-indicator");
@@ -4697,11 +4626,27 @@ async function executeSubmit() {
   }
 
   const submitBtn = document.getElementById("submit-btn");
+  const pixelDrawBtn = document.getElementById("pixel-submit-draw");
+  const pixelUploadBtn = document.getElementById("pixel-submit-upload");
+
   let originalBtnText = "작품 제출 완료하기";
+  let originalPixelDrawText = "작품 최종 제출";
+  let originalPixelUploadText = "업로드 파일 제출하기";
+
   if (submitBtn) {
     originalBtnText = submitBtn.textContent;
     submitBtn.disabled = true;
     submitBtn.textContent = "클라우드에 접수 중...";
+  }
+  if (pixelDrawBtn) {
+    originalPixelDrawText = pixelDrawBtn.innerHTML;
+    pixelDrawBtn.disabled = true;
+    pixelDrawBtn.textContent = "클라우드에 접수 중...";
+  }
+  if (pixelUploadBtn) {
+    originalPixelUploadText = pixelUploadBtn.textContent;
+    pixelUploadBtn.disabled = true;
+    pixelUploadBtn.textContent = "클라우드에 접수 중...";
   }
 
   if (GOOGLE_SHEET_API_URL) {
@@ -4724,6 +4669,14 @@ async function executeSubmit() {
           submitBtn.disabled = false;
           submitBtn.textContent = originalBtnText;
         }
+        if (pixelDrawBtn) {
+          pixelDrawBtn.disabled = false;
+          pixelDrawBtn.innerHTML = originalPixelDrawText;
+        }
+        if (pixelUploadBtn) {
+          pixelUploadBtn.disabled = false;
+          pixelUploadBtn.textContent = originalPixelUploadText;
+        }
         return;
       }
 
@@ -4737,12 +4690,28 @@ async function executeSubmit() {
         submitBtn.disabled = false;
         submitBtn.textContent = originalBtnText;
       }
+      if (pixelDrawBtn) {
+        pixelDrawBtn.disabled = false;
+        pixelDrawBtn.innerHTML = originalPixelDrawText;
+      }
+      if (pixelUploadBtn) {
+        pixelUploadBtn.disabled = false;
+        pixelUploadBtn.textContent = originalPixelUploadText;
+      }
     }
   } else {
     showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
     if (submitBtn) {
       submitBtn.disabled = false;
       submitBtn.textContent = originalBtnText;
+    }
+    if (pixelDrawBtn) {
+      pixelDrawBtn.disabled = false;
+      pixelDrawBtn.innerHTML = originalPixelDrawText;
+    }
+    if (pixelUploadBtn) {
+      pixelUploadBtn.disabled = false;
+      pixelUploadBtn.textContent = originalPixelUploadText;
     }
   }
 }
@@ -4773,15 +4742,7 @@ async function executeLoggedInLookup() {
       if (result.status === "success") {
         mySubmissions = result.data;
         
-        // Clean up localStorage for this student: if a non-draft submission is not in the remote list, remove it
-        const remoteIds = new Set(mySubmissions.map(s => s.id));
-        const allSubmissions = JSON.parse(localStorage.getItem("soro_submissions") || "[]");
-        const cleanedSubmissions = allSubmissions.filter(entry => {
-          if (entry.studentUsername.toLowerCase() !== currentUser.userKey.toLowerCase()) return true;
-          if (entry.contestId === "pixelart_draft") return true;
-          return remoteIds.has(entry.id);
-        });
-        localStorage.setItem("soro_submissions", JSON.stringify(cleanedSubmissions));
+
       } else {
         showToast(result.message || "데이터를 불러오는 중 오류가 발생했습니다.", "error");
       }
@@ -5081,17 +5042,10 @@ async function updateLiveCounters() {
           return;
         }
       } catch (e) {
-        // Fallback silently to local
+        console.error("Failed to query live counter count remotely:", e);
       }
     }
-
-    const allSubmissions = JSON.parse(localStorage.getItem("soro_submissions") || "[]");
-    const mySubmissions = allSubmissions.filter(entry =>
-      entry.studentUsername.toLowerCase() === currentUser.userKey.toLowerCase() &&
-      entry.contestId !== "pixelart_draft"
-    );
-    count = mySubmissions.length;
-    document.getElementById("stat-my-submissions").textContent = `${count}개`;
+    document.getElementById("stat-my-submissions").textContent = "0개";
   } else {
     document.getElementById("stat-my-submissions").textContent = "0개";
   }
@@ -5232,6 +5186,20 @@ function initAdminPanel() {
     });
   }
 
+  // Contest filter chips
+  const contestFilters = document.getElementById("admin-contest-filters");
+  if (contestFilters) {
+    contestFilters.querySelectorAll(".admin-filter-chip").forEach(chip => {
+      chip.addEventListener("click", (e) => {
+        contestFilters.querySelectorAll(".admin-filter-chip").forEach(c => c.classList.remove("active"));
+        e.target.classList.add("active");
+        adminCurrentContestFilter = e.target.dataset.filter;
+        adminGalleryCurrentLimit = 24;
+        renderAdminSubmissionsTable();
+      });
+    });
+  }
+
   // Two-Tier Grade Selector
   const gradeSelector = document.getElementById("admin-grade-selector");
   if (gradeSelector) {
@@ -5279,8 +5247,8 @@ function openAdminDrawer() {
     }
     
     renderAdminClassSelector();
-    initAdminCollapsiblePanel();
     setAdminTabMode(adminCurrentTabMode || "contest");
+    fetchAndRenderAdminData();
   }
 }
 
@@ -5387,32 +5355,7 @@ function renderAdminKPIs() {
   }
 }
 
-// 4-1. Collapsible Panel State Initializer
-function initAdminCollapsiblePanel() {
-  const isCollapsed = localStorage.getItem("soro_admin_panel_collapsed") !== "false";
-  const grid = document.getElementById("admin-contest-cards");
-  const btn = document.getElementById("admin-panel-toggle-btn");
-  if (grid && btn) {
-    if (isCollapsed) {
-      grid.classList.add("collapsed");
-      btn.classList.remove("active");
-    } else {
-      grid.classList.remove("collapsed");
-      btn.classList.add("active");
-    }
-  }
-}
 
-// 4-2. Toggle Accordion for Admin Contest Cards Panel
-window.toggleAdminContestPanel = function() {
-  const grid = document.getElementById("admin-contest-cards");
-  const btn = document.getElementById("admin-panel-toggle-btn");
-  if (!grid || !btn) return;
-
-  const isCollapsed = grid.classList.toggle("collapsed");
-  localStorage.setItem("soro_admin_panel_collapsed", isCollapsed ? "true" : "false");
-  btn.classList.toggle("active", !isCollapsed);
-};
 
 // Toggle Accordion for Admin Filter Bar (Grade/Class Selector)
 window.toggleAdminFilterAccordion = function() {
@@ -5571,7 +5514,6 @@ async function fetchAndRenderAdminData() {
     showToast(isBulkSuccess ? "원격 동기화 가속 완료 (1회 일괄 조회 성공)!" : "원격 동기화 완료 (구버전 호환 우회 적용)", "success");
     
     renderAdminKPIs();
-    renderAdminContestCards();
     
     // 현재 스위처 뷰 모드에 따라 렌더링 분기
     if (adminCurrentViewMode === "gallery") {
@@ -5586,7 +5528,6 @@ async function fetchAndRenderAdminData() {
     // Reset to empty
     adminAllSubmissions = [];
     renderAdminKPIs();
-    renderAdminContestCards();
     
     if (adminCurrentViewMode === "gallery") {
       renderAdminSubmissionsGallery();
@@ -5614,129 +5555,9 @@ function deduplicateSubmissions(submissions) {
   return Array.from(map.values());
 }
 
-// 7. Render Contest Control Cards (1x6 Grid Layout & Simple Switch)
-function renderAdminContestCards() {
-  const container = document.getElementById("admin-contest-cards");
-  if (!container) return;
 
-  const locks = contestLocks;
-  const deduped = deduplicateSubmissions(adminAllSubmissions);
-  const contestEmojis = { keyring: "🔑", cuttoon: "📰", library: "📚", transcription: "✍️", pixelart: "🎮", sound_album: "🎵" };
-  
-  // Custom colors and glows
-  const brandGlows = {
-    keyring: { color: "rgba(59, 130, 246, 0.4)", rgb: "59, 130, 246" },
-    cuttoon: { color: "rgba(16, 185, 129, 0.4)", rgb: "16, 185, 129" },
-    library: { color: "rgba(139, 92, 246, 0.4)", rgb: "139, 92, 246" },
-    transcription: { color: "rgba(245, 158, 11, 0.4)", rgb: "245, 158, 11" },
-    pixelart: { color: "rgba(236, 72, 153, 0.4)", rgb: "236, 72, 153" },
-    sound_album: { color: "rgba(168, 85, 247, 0.4)", rgb: "168, 85, 247" }
-  };
 
-  let html = "";
-  const contestIds = ["keyring", "cuttoon", "library", "transcription", "pixelart", "sound_album"];
-  contestIds.forEach(cId => {
-    const contest = CONTESTS_DATA.find(c => c.id === cId);
-    const count = deduped.filter(s => s.contestId === cId).length;
-    
-    // 오직 수동 잠금(locks[cId] === true) 여부에 의해서만 마감(locked) 스타일 결정
-    const isLocked = locks[cId] === true;
 
-    const isSelected = adminCurrentContestFilter === cId;
-    const glow = brandGlows[cId] || { color: "rgba(255,255,255,0.08)", rgb: "255,255,255" };
-    const ledColor = `rgb(${glow.rgb})`;
-    html += `
-      <div class="admin-contest-card ${isSelected ? 'selected' : ''} ${isLocked ? 'locked' : ''}" 
-           data-contest="${cId}" 
-           style="--glow-color: ${glow.color}; --glow-rgb: ${glow.rgb}; display: flex; flex-direction: row; justify-content: space-between; align-items: center; padding: 6px 10px; gap: 6px; min-width: 0;">
-        <div style="display: flex; align-items: center; gap: 6px; overflow: hidden; min-width: 0; flex-grow: 1;">
-          <span class="admin-led-dot ${!isLocked ? 'active' : ''}" style="--led-color: ${ledColor};"></span>
-          <span style="font-weight: 700; font-size: 0.75rem; display: flex; align-items: center; gap: 3px; min-width: 0; color: var(--text-primary, #ffffff);">
-            <span style="flex-shrink: 0;">${contestEmojis[cId] || ''}</span>
-            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${contest ? contest.title.substring(0, 6) : cId}</span>
-          </span>
-          <span style="font-size: 0.68rem; color: var(--text-secondary, #909099); font-weight: 600; flex-shrink: 0;">
-            (${count})
-          </span>
-        </div>
-        <button class="admin-btn-status-control ${!isLocked ? 'active' : 'locked'}" 
-                onclick="event.stopPropagation(); toggleContestLock('${cId}')"
-                style="flex-shrink: 0;">
-          ${!isLocked ? '🟢 접수중' : '🔒 마감됨'}
-        </button>
-      </div>
-    `;
-  });
-
-  container.innerHTML = html;
-
-  // Add click to card -> filter toggle
-  container.querySelectorAll(".admin-contest-card").forEach(card => {
-    card.addEventListener("click", () => {
-      const targetContest = card.dataset.contest;
-      if (adminCurrentContestFilter === targetContest) {
-        adminCurrentContestFilter = "all"; // toggle off
-      } else {
-        adminCurrentContestFilter = targetContest;
-      }
-      renderAdminContestCards();
-      
-      if (adminCurrentViewMode === "gallery") {
-        renderAdminSubmissionsGallery();
-      } else {
-        renderAdminSubmissionsTable();
-      }
-    });
-  });
-}
-
-// 8. Toggle Contest Lock (Manual Locking)
-window.toggleContestLock = async function(cId) {
-  const nextStatus = !contestLocks[cId];
-  showToast("접수 상태 변경 중...", "info");
-  
-  if (GOOGLE_SHEET_API_URL) {
-    try {
-      const response = await fetch(GOOGLE_SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify({
-          action: "updateContestLock",
-          contestId: cId,
-          isLocked: nextStatus
-        })
-      });
-      const result = await response.json();
-      if (result.status === "success") {
-        contestLocks[cId] = nextStatus;
-        showToast("공모전 접수 제어 상태가 실시간 연계 변경되었습니다.", "success");
-      } else {
-        showToast("제어 상태 변경에 실패했습니다: " + result.message, "error");
-        return;
-      }
-    } catch (e) {
-      console.error(e);
-      showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
-      return;
-    }
-  } else {
-    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
-    return;
-  }
-
-  // Refresh Admin Grid
-  renderAdminContestCards();
-  
-  if (adminCurrentViewMode === "gallery") {
-    renderAdminSubmissionsGallery();
-  } else {
-    renderAdminSubmissionsTable();
-  }
-  
-  if (typeof renderContestGrid === "function") {
-    renderContestGrid();
-  }
-};
 
 // 8-3. Render Data Gallery
 function renderAdminSubmissionsGallery() {
@@ -6186,7 +6007,6 @@ window.deleteSubmissionByAdmin = async function(id, contestId) {
 
 
       renderAdminKPIs(); // Refresh stats
-      renderAdminContestCards();
       renderAdminSubmissionsTable();
       showToast("출품작이 영구 삭제되었습니다.", "success");
 
@@ -6220,6 +6040,9 @@ window.setAdminTabMode = function(mode) {
   const mainContest = document.getElementById("admin-contest-main-area");
   const mainZepQuiz = document.getElementById("admin-zepquiz-main-area");
   
+  const mainTitle = document.querySelector(".admin-main-title");
+  const mainSubtitle = document.querySelector(".admin-main-subtitle");
+  
   // 탭 버튼 active 스타일 전환
   if (mode === "contest") {
     if (tabContest) {
@@ -6240,12 +6063,14 @@ window.setAdminTabMode = function(mode) {
     if (mainContest) mainContest.style.display = "block";
     if (mainZepQuiz) mainZepQuiz.style.display = "none";
     
+    if (mainTitle) mainTitle.textContent = "공모전 데이터 센터";
+    if (mainSubtitle) mainSubtitle.textContent = "제출 작품 및 심사 자료 통합 관리";
+    
     // 테마 속성 해제
     document.body.removeAttribute("data-admin-mode");
     
     // 기존 공모전 데이터 렌더링
     renderAdminKPIs();
-    renderAdminContestCards();
     if (adminCurrentViewMode === "gallery") {
       renderAdminSubmissionsGallery();
     } else {
@@ -6269,6 +6094,9 @@ window.setAdminTabMode = function(mode) {
     
     if (mainContest) mainContest.style.display = "none";
     if (mainZepQuiz) mainZepQuiz.style.display = "block";
+    
+    if (mainTitle) mainTitle.textContent = "젭퀴즈 현황";
+    if (mainSubtitle) mainSubtitle.textContent = "학급별 젭퀴즈 참여도 및 리워드 지급 현황";
     
     // 젭퀴즈 테마 속성 설정
     document.body.setAttribute("data-admin-mode", "zepquiz");
@@ -6348,7 +6176,8 @@ function renderZepQuizKPIs() {
     totalStudents += cls.totalStudents;
     totalClassesCount++;
     
-    if (cls.totalStudents > 0 && cls.completedCount === cls.totalStudents) {
+    const isEligible = cls.totalStudents > 0 && (cls.completedCount >= Math.ceil(cls.totalStudents * 0.8));
+    if (isEligible) {
       completedClassesCount++;
     }
     
@@ -6423,23 +6252,25 @@ function renderZepQuizClassGrid() {
   
   sortedKeys.forEach(classKey => {
     const cls = zepQuizClassesData[classKey];
-    const is100Pct = cls.totalStudents > 0 && cls.completedCount === cls.totalStudents;
+    const isEligible = cls.totalStudents > 0 && (cls.completedCount >= Math.ceil(cls.totalStudents * 0.8));
     const isPrizeDelivered = cls.prizeStatus === "delivered";
     const pct = cls.totalStudents > 0 ? Math.round((cls.completedCount / cls.totalStudents) * 100) : 0;
     
-    const cookieBtnClass = is100Pct ? "zep-cookie-btn active" : "zep-cookie-btn disabled";
+    const cookieBtnClass = isEligible ? "zep-cookie-btn active" : "zep-cookie-btn disabled";
     const cookieText = isPrizeDelivered ? "🍪 지급완료" : "🍪 지급하기";
     
     const cardBorderColor = isPrizeDelivered 
       ? "border: 1px solid rgba(236, 72, 153, 0.4); box-shadow: 0 4px 16px rgba(236, 72, 153, 0.08);" 
-      : (is100Pct ? "border: 1px solid rgba(16, 185, 129, 0.4); box-shadow: 0 4px 16px rgba(16, 185, 129, 0.08);" : "");
+      : (isEligible ? "border: 1px solid rgba(16, 185, 129, 0.4); box-shadow: 0 4px 16px rgba(16, 185, 129, 0.08);" : "");
       
     html += `
       <div class="admin-zep-class-card" onclick="openZepDrilldown('${cls.grade}', '${cls.classNum}')" style="${cardBorderColor}">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
           <h3 style="margin: 0; font-size: 0.95rem; font-weight: 800; color: white;">${cls.grade}학년 ${cls.classNum}반</h3>
-          <span style="font-size: 0.72rem; color: #a0a0aa; font-weight: 700;">
-            ${cls.completedCount}/${cls.totalStudents}명 (${pct}%)
+          <span style="font-size: 0.72rem; color: #a0a0aa; font-weight: 700; cursor: pointer; background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;" 
+                onclick="event.stopPropagation(); editClassStudentCount('${cls.grade}', '${cls.classNum}', ${cls.totalStudents})" 
+                title="학급 정원 수정">
+            ${cls.completedCount}/${cls.totalStudents}명 (${pct}%) ✏️
           </span>
         </div>
         
@@ -6450,7 +6281,7 @@ function renderZepQuizClassGrid() {
         <div style="display: flex; justify-content: flex-end;">
           <button class="${cookieBtnClass} ${isPrizeDelivered ? 'delivered' : ''}" 
                   onclick="event.stopPropagation(); toggleZepClassCookie('${cls.grade}', '${cls.classNum}')" 
-                  ${!is100Pct ? 'disabled' : ''}>
+                  ${!isEligible ? 'disabled' : ''}>
             ${cookieText}
           </button>
         </div>
@@ -6562,9 +6393,9 @@ window.toggleZepClassCookie = async function(grade, classNum) {
   if (!zepQuizClassesData || !zepQuizClassesData[classKey]) return;
   
   const cls = zepQuizClassesData[classKey];
-  const is100Pct = cls.totalStudents > 0 && cls.completedCount === cls.totalStudents;
-  if (!is100Pct) {
-    showToast("학급 인원 100% 완료 시에만 과자 지급 처리가 가능합니다.", "warning");
+  const isEligible = cls.totalStudents > 0 && (cls.completedCount >= Math.ceil(cls.totalStudents * 0.8));
+  if (!isEligible) {
+    showToast("학급 인원 80% 이상 참여 시에만 과자 지급 처리가 가능합니다.", "warning");
     return;
   }
   
@@ -6606,6 +6437,44 @@ window.toggleZepClassCookie = async function(grade, classNum) {
       }
     } catch (err) {
       console.error(err);
+      showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+    }
+  } else {
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+  }
+};
+
+window.editClassStudentCount = async function(grade, classNum, currentCount) {
+  const input = prompt(`${grade}학년 ${classNum}반의 총 학생 수를 입력해주세요:`, currentCount);
+  if (input === null) return;
+  const newCount = parseInt(input, 10);
+  if (isNaN(newCount) || newCount < 0) {
+    showToast("올바른 숫자를 입력해주세요.", "error");
+    return;
+  }
+  
+  showToast("학급 참여 인원 수정 중...", "info");
+  
+  if (GOOGLE_SHEET_API_URL) {
+    try {
+      const response = await fetch(GOOGLE_SHEET_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: JSON.stringify({
+          action: "updateClassStudentCount",
+          classKey: `${grade}-${classNum}`,
+          studentCount: newCount
+        })
+      });
+      const result = await response.json();
+      if (result.status === "success") {
+        showToast(`${grade}학년 ${classNum}반 인원이 ${newCount}명으로 수정되었습니다.`, "success");
+        fetchZepQuizDataAndRender();
+      } else {
+        showToast("수정에 실패했습니다: " + result.message, "error");
+      }
+    } catch (e) {
+      console.error(e);
       showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
     }
   } else {
@@ -6668,7 +6537,8 @@ function doPost(e) {
       
       var data = sheet.getDataRange().getValues();
       var exists = false;
-      for (var i = 1; i < data.length; i++) {
+      var startIndex = getStartIndex(data, "UserKey");
+      for (var i = startIndex; i < data.length; i++) {
         if (data[i][0] === requestData.userKey) {
           exists = true;
           break;
@@ -6697,7 +6567,8 @@ function doPost(e) {
       
       if (sheet) {
         var data = sheet.getDataRange().getValues();
-        for (var i = 1; i < data.length; i++) {
+        var startIndex = getStartIndex(data, "UserKey");
+        for (var i = startIndex; i < data.length; i++) {
           if (data[i][0] === requestData.userKey && String(data[i][5]) === String(requestData.password)) {
             authenticated = true;
             break;
@@ -6719,7 +6590,8 @@ function doPost(e) {
       
       if (sheet) {
         var data = sheet.getDataRange().getValues();
-        for (var i = 1; i < data.length; i++) {
+        var startIndex = getStartIndex(data, "UserKey");
+        for (var i = startIndex; i < data.length; i++) {
           if (data[i][0] === requestData.userKey) {
             sheet.getRange(i + 1, 6).setValue(requestData.password); // 6번째 열 (Password) 수정
             updated = true;
@@ -6778,7 +6650,8 @@ function doPost(e) {
       
       if (sheet) {
         var data = sheet.getDataRange().getValues();
-        for (var i = 1; i < data.length; i++) {
+        var startIndex = getStartIndex(data, "ID");
+        for (var i = startIndex; i < data.length; i++) {
           if (data[i][3] === requestData.studentUsername) {
             results.push({
               id: data[i][0],
@@ -6808,11 +6681,12 @@ function doPost(e) {
       
       if (sheet) {
         var data = sheet.getDataRange().getValues();
+        var startIndex = getStartIndex(data, "ID");
         var targetUsername = "";
         var targetContestId = "";
         
         // 1단계: 삭제 대상 ID의 StudentUsername과 ContestID를 조회합니다.
-        for (var i = 1; i < data.length; i++) {
+        for (var i = startIndex; i < data.length; i++) {
           if (data[i][0] === requestData.id) {
             targetUsername = data[i][3];
             targetContestId = data[i][1];
@@ -6822,7 +6696,7 @@ function doPost(e) {
         
         // 2단계: 일치하는 모든 행을 지우고, 해당 행들에 속한 구글 드라이브 파일도 함께 삭제(휴지통 이동)합니다.
         if (targetUsername && targetContestId) {
-          for (var i = data.length - 1; i >= 1; i--) {
+          for (var i = data.length - 1; i >= startIndex; i--) {
             if (data[i][3] === targetUsername && data[i][1] === targetContestId) {
               // 파일 ID 추출 및 삭제
               try {
@@ -6847,7 +6721,7 @@ function doPost(e) {
           }
         } else {
           // Fallback: ID 일치 행만 개별 삭제
-          for (var i = data.length - 1; i >= 1; i--) {
+          for (var i = data.length - 1; i >= startIndex; i--) {
             if (data[i][0] === requestData.id) {
               try {
                 var entryData = {};
@@ -6886,7 +6760,8 @@ function doPost(e) {
       
       if (sheet) {
         var data = sheet.getDataRange().getValues();
-        for (var i = 1; i < data.length; i++) {
+        var startIndex = getStartIndex(data, "ID");
+        for (var i = startIndex; i < data.length; i++) {
           if (filterContestId === "all" || data[i][1] === filterContestId) {
             results.push({
               id: data[i][0],
@@ -6908,7 +6783,7 @@ function doPost(e) {
       }
       response = { status: "success", data: results };
     }
-
+    
     // 7. 사은품 지급 상태 실시간 업데이트 액션 (Submissions 시트)
     else if (requestData.action === "updateSubmissionPrizeStatus") {
       var sheet = ss.getSheetByName("Submissions");
@@ -6916,7 +6791,8 @@ function doPost(e) {
       
       if (sheet) {
         var data = sheet.getDataRange().getValues();
-        for (var i = 1; i < data.length; i++) {
+        var startIndex = getStartIndex(data, "ID");
+        for (var i = startIndex; i < data.length; i++) {
           if (data[i][0] === requestData.id) {
             var entryData = {};
             try { 
@@ -6945,7 +6821,8 @@ function doPost(e) {
       var locks = {};
       if (sheet) {
         var data = sheet.getDataRange().getValues();
-        for (var i = 1; i < data.length; i++) {
+        var startIndex = getStartIndex(data, "Key");
+        for (var i = startIndex; i < data.length; i++) {
           var key = data[i][0];
           if (key.indexOf("contest_lock_") === 0) {
             var contestId = key.substring(13);
@@ -6966,7 +6843,8 @@ function doPost(e) {
       var data = sheet.getDataRange().getValues();
       var key = "contest_lock_" + requestData.contestId;
       var foundIndex = -1;
-      for (var i = 1; i < data.length; i++) {
+      var startIndex = getStartIndex(data, "Key");
+      for (var i = startIndex; i < data.length; i++) {
         if (data[i][0] === key) {
           foundIndex = i;
           break;
@@ -6986,7 +6864,8 @@ function doPost(e) {
       var updated = false;
       if (sheet) {
         var data = sheet.getDataRange().getValues();
-        for (var i = 1; i < data.length; i++) {
+        var startIndex = getStartIndex(data, "ID");
+        for (var i = startIndex; i < data.length; i++) {
           if (data[i][0] === requestData.id) {
             var entryData = {};
             try { 
@@ -7015,15 +6894,20 @@ function doPost(e) {
       var settingsSheet = ss.getSheetByName("Settings");
       var roundId = requestData.roundId || "zepquiz";
       
-      // 1. Settings 시트에서 학급 과자 지급 상태 로드
+      // 1. Settings 시트에서 학급 과자 지급 상태 및 학생 정원 로드
       var classPrizes = {};
+      var classStudentCounts = {};
       if (settingsSheet) {
         var settingsData = settingsSheet.getDataRange().getValues();
-        for (var i = 1; i < settingsData.length; i++) {
+        var startIndex = getStartIndex(settingsData, "Key");
+        for (var i = startIndex; i < settingsData.length; i++) {
           var key = settingsData[i][0];
           if (key.indexOf("zep_prize_" + roundId + "_") === 0) {
             var classKey = key.substring(("zep_prize_" + roundId + "_").length);
             classPrizes[classKey] = settingsData[i][1];
+          } else if (key.indexOf("zep_student_count_") === 0) {
+            var classKey = key.substring("zep_student_count_".length);
+            classStudentCounts[classKey] = parseInt(settingsData[i][1], 10);
           }
         }
       }
@@ -7032,7 +6916,8 @@ function doPost(e) {
       var users = [];
       if (usersSheet) {
         var usersData = usersSheet.getDataRange().getValues();
-        for (var i = 1; i < usersData.length; i++) {
+        var startIndex = getStartIndex(usersData, "UserKey");
+        for (var i = startIndex; i < usersData.length; i++) {
           users.push({
             userKey: usersData[i][0],
             grade: parseInt(usersData[i][1], 10),
@@ -7047,7 +6932,8 @@ function doPost(e) {
       var submissions = {};
       if (subsSheet) {
         var subsData = subsSheet.getDataRange().getValues();
-        for (var i = 1; i < subsData.length; i++) {
+        var startIndex = getStartIndex(subsData, "ID");
+        for (var i = startIndex; i < subsData.length; i++) {
           var contestId = subsData[i][1];
           if (contestId === roundId) {
             var username = subsData[i][3];
@@ -7069,13 +6955,15 @@ function doPost(e) {
       for (var g = 3; g <= 6; g++) {
         for (var c = 1; c <= 3; c++) {
           var classKey = g + "-" + c;
+          var configuredCount = classStudentCounts[classKey];
           classes[classKey] = {
             grade: g,
             classNum: c,
-            totalStudents: 0,
+            totalStudents: typeof configuredCount === "number" ? configuredCount : 0,
             completedCount: 0,
             prizeStatus: classPrizes[classKey] || "waiting",
-            students: []
+            students: [],
+            isCustomStudentCount: typeof configuredCount === "number"
           };
         }
       }
@@ -7086,7 +6974,9 @@ function doPost(e) {
         var classKey = u.grade + "-" + u.classNum;
         
         if (classes[classKey]) {
-          classes[classKey].totalStudents++;
+          if (!classes[classKey].isCustomStudentCount) {
+            classes[classKey].totalStudents++;
+          }
           
           var usernameLower = u.userKey.toLowerCase();
           var isCompleted = submissions.hasOwnProperty(usernameLower);
@@ -7135,7 +7025,8 @@ function doPost(e) {
       var key = "zep_prize_" + roundId + "_" + classKey;
       var data = sheet.getDataRange().getValues();
       var foundIndex = -1;
-      for (var i = 1; i < data.length; i++) {
+      var startIndex = getStartIndex(data, "Key");
+      for (var i = startIndex; i < data.length; i++) {
         if (data[i][0] === key) {
           foundIndex = i;
           break;
@@ -7151,6 +7042,37 @@ function doPost(e) {
       response = { status: "success", message: "과자 지급 상태 업데이트 완료" };
     }
     
+    // 13. 학급 학생 수 수정 액션 (Settings 시트)
+    else if (requestData.action === "updateClassStudentCount") {
+      var sheet = ss.getSheetByName("Settings");
+      if (!sheet) {
+        sheet = ss.insertSheet("Settings");
+        sheet.appendRow(["Key", "Value"]);
+      }
+      
+      var classKey = requestData.classKey;
+      var studentCount = parseInt(requestData.studentCount, 10);
+      
+      var key = "zep_student_count_" + classKey;
+      var data = sheet.getDataRange().getValues();
+      var foundIndex = -1;
+      var startIndex = getStartIndex(data, "Key");
+      for (var i = startIndex; i < data.length; i++) {
+        if (data[i][0] === key) {
+          foundIndex = i;
+          break;
+        }
+      }
+      
+      if (foundIndex !== -1) {
+        sheet.getRange(foundIndex + 1, 2).setValue(studentCount);
+      } else {
+        sheet.appendRow([key, studentCount]);
+      }
+      
+      response = { status: "success", message: "학생 수 설정 완료" };
+    }
+    
   } catch (error) {
     response = { status: "error", message: error.toString() };
   }
@@ -7158,6 +7080,14 @@ function doPost(e) {
   // CORS 우회 응답 설정
   return ContentService.createTextOutput(JSON.stringify(response))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// 헤더 행 존재 여부를 판단하여 실제 데이터의 시작 인덱스를 반환하는 헬퍼 함수
+function getStartIndex(data, headerText) {
+  if (data && data.length > 0 && data[0] && data[0][0] === headerText) {
+    return 1;
+  }
+  return 0;
 }
 
 // URL에서 구글 드라이브 파일 ID를 추출하는 헬퍼 함수
