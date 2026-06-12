@@ -6623,13 +6623,28 @@ window.openZepDrilldown = function(grade, classNum) {
       const cardBg = completed ? "rgba(16, 185, 129, 0.03)" : "rgba(244, 63, 94, 0.02)";
       const cardBorder = completed ? "rgba(16, 185, 129, 0.12)" : "rgba(244, 63, 94, 0.08)";
       
+      let actionHtml = "";
+      if (completed && student.submissionId) {
+        actionHtml = `
+          <button class="admin-btn-action" 
+                  onclick="event.stopPropagation(); deleteZepSubmissionByAdmin('${student.submissionId}', '${student.name}', '${grade}', '${classNum}')" 
+                  title="젭퀴즈 제출 삭제" 
+                  style="padding: 2px 6px; font-size: 0.65rem; border-radius: 4px; background: rgba(244,63,94,0.1); border: 1px solid rgba(244,63,94,0.2); color: #f43f5e; cursor: pointer; transition: all 0.2s;">
+            삭제
+          </button>
+        `;
+      }
+      
       html += `
         <div class="admin-zep-student-card" style="background: ${cardBg}; border: 1px solid ${cardBorder}; padding: 12px; border-radius: 8px; display: flex; flex-direction: column; gap: 8px;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="font-weight: 800; color: white; font-size: 0.8rem;">
               ${student.number}번 ${student.name}
             </span>
-            <span class="${badgeClass}">${badgeText}</span>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span class="${badgeClass}">${badgeText}</span>
+              ${actionHtml}
+            </div>
           </div>
           
           <div style="font-size: 0.68rem; color: #808088;">
@@ -6652,6 +6667,42 @@ window.openZepDrilldown = function(grade, classNum) {
   drilldownArea.style.display = "block";
   
   drilldownArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
+window.deleteZepSubmissionByAdmin = async function(submissionId, studentName, grade, classNum) {
+  if (!confirm(`⚠️ ${studentName} 학생의 젭퀴즈 제출 데이터를 정말로 영구 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+
+  showToast("젭퀴즈 제출 데이터 영구 삭제 중...", "info");
+
+  if (GOOGLE_SHEET_API_URL) {
+    try {
+      const response = await fetch(GOOGLE_SHEET_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: JSON.stringify({ action: "deleteSubmission", id: submissionId })
+      });
+      const result = await response.json();
+
+      if (result.status === "error") {
+        showToast(result.message, "error");
+        return;
+      }
+
+      showToast(`${studentName} 학생의 젭퀴즈 제출 데이터가 삭제되었습니다.`, "success");
+      
+      // 젭퀴즈 현황 전체 데이터 갱신
+      await fetchZepQuizDataAndRender();
+      
+      // 현재 열려있는 학급 상세 드릴다운 뷰 새로고침
+      openZepDrilldown(grade, classNum);
+
+    } catch (err) {
+      console.error("ZepQuiz remote delete failed:", err);
+      showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+    }
+  } else {
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+  }
 };
 
 window.closeZepDrilldown = function() {
