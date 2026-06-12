@@ -5691,9 +5691,10 @@ async function fetchAndRenderAdminData() {
       });
       const result = await response.json();
       if (result.status === "success" && Array.isArray(result.data)) {
-        adminAllSubmissions = result.data;
+        // ZepQuiz 관련 데이터 배제 필터링 적용
+        adminAllSubmissions = result.data.filter(entry => entry && entry.contestId && !entry.contestId.startsWith("zepquiz"));
         isBulkSuccess = true;
-        console.log(`[Bulk Fetch] Successfully loaded ${adminAllSubmissions.length} entries.`);
+        console.log(`[Bulk Fetch] Successfully loaded ${adminAllSubmissions.length} entries (filtered zepquiz).`);
       }
     } catch (bulkErr) {
       console.warn("[Bulk Fetch] Not supported or failed. Falling back to parallel query:", bulkErr);
@@ -5720,7 +5721,8 @@ async function fetchAndRenderAdminData() {
       });
 
       const results = await Promise.all(fetchPromises);
-      adminAllSubmissions = results.flat();
+      // Fallback 데이터에서도 ZepQuiz 데이터가 섞이지 않도록 2중 필터링 적용
+      adminAllSubmissions = results.flat().filter(entry => entry && entry.contestId && !entry.contestId.startsWith("zepquiz"));
     }
     
     adminAllSubmissions.forEach(entry => {
