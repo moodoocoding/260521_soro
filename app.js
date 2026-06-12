@@ -6623,27 +6623,37 @@ window.openZepDrilldown = function(grade, classNum) {
       const cardBg = completed ? "rgba(16, 185, 129, 0.03)" : "rgba(244, 63, 94, 0.02)";
       const cardBorder = completed ? "rgba(16, 185, 129, 0.12)" : "rgba(244, 63, 94, 0.08)";
       
-      let actionHtml = "";
-      if (completed && student.submissionId) {
-        actionHtml = `
-          <button class="admin-btn-action" 
-                  onclick="event.stopPropagation(); deleteZepSubmissionByAdmin('${student.submissionId}', '${student.name}', '${grade}', '${classNum}')" 
-                  title="젭퀴즈 제출 삭제" 
-                  style="padding: 2px 6px; font-size: 0.65rem; border-radius: 4px; background: rgba(244,63,94,0.1); border: 1px solid rgba(244,63,94,0.2); color: #f43f5e; cursor: pointer; transition: all 0.2s;">
-            삭제
+      // 톱니바퀴 드롭다운 메뉴 마크업
+      const settingsHtml = `
+        <div style="position: relative;">
+          <button class="zep-admin-settings-btn" 
+                  onclick="event.stopPropagation(); toggleZepStudentMenu(event, '${student.username}')" 
+                  title="학생 제어 관리">
+            ⚙️
           </button>
-        `;
-      }
+          <div id="zep-dropdown-${student.username}" class="zep-admin-dropdown-menu">
+            <button class="zep-dropdown-item" 
+                    onclick="event.stopPropagation(); deleteZepSubmissionByAdmin('${student.submissionId}', '${student.name}', '${grade}', '${classNum}')"
+                    ${!completed ? 'disabled' : ''}>
+              📄 제출 자료 삭제
+            </button>
+            <button class="zep-dropdown-item danger" 
+                    onclick="event.stopPropagation(); deleteZepUserByAdmin('${student.username}', '${student.name}', '${grade}', '${classNum}')">
+              👤 학생 계정 삭제
+            </button>
+          </div>
+        </div>
+      `;
       
       html += `
-        <div class="admin-zep-student-card" style="background: ${cardBg}; border: 1px solid ${cardBorder}; padding: 12px; border-radius: 8px; display: flex; flex-direction: column; gap: 8px;">
+        <div class="admin-zep-student-card" style="background: ${cardBg}; border: 1px solid ${cardBorder}; padding: 12px; border-radius: 8px; display: flex; flex-direction: column; gap: 8px; position: relative;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="font-weight: 800; color: white; font-size: 0.8rem;">
               ${student.number}번 ${student.name}
             </span>
             <div style="display: flex; align-items: center; gap: 6px;">
               <span class="${badgeClass}">${badgeText}</span>
-              ${actionHtml}
+              ${settingsHtml}
             </div>
           </div>
           
@@ -6667,6 +6677,23 @@ window.openZepDrilldown = function(grade, classNum) {
   drilldownArea.style.display = "block";
   
   drilldownArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
+window.toggleZepStudentMenu = function(event, username) {
+  event.stopPropagation();
+  
+  const dropdown = document.getElementById(`zep-dropdown-${username}`);
+  if (!dropdown) return;
+  
+  const isOpen = dropdown.style.display === "block";
+  
+  // 이미 열려 있는 다른 드롭다운 전부 닫기
+  const allMenus = document.querySelectorAll(".zep-admin-dropdown-menu");
+  allMenus.forEach(menu => {
+    menu.style.display = "none";
+  });
+  
+  dropdown.style.display = isOpen ? "none" : "block";
 };
 
 window.deleteZepSubmissionByAdmin = async function(submissionId, studentName, grade, classNum) {
@@ -6704,6 +6731,50 @@ window.deleteZepSubmissionByAdmin = async function(submissionId, studentName, gr
     showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
   }
 };
+
+window.deleteZepUserByAdmin = async function(userKey, studentName, grade, classNum) {
+  if (!confirm(`⚠️ 정말로 [${studentName}] 학생의 계정을 영구 삭제하시겠습니까?\n이 학생이 제출한 모든 공모전 및 젭퀴즈 응모 자료도 함께 영구 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.`)) return;
+  
+  showToast(`${studentName} 학생 계정 영구 삭제 중...`, "info");
+  
+  if (GOOGLE_SHEET_API_URL) {
+    try {
+      const response = await fetch(GOOGLE_SHEET_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: JSON.stringify({ action: "deleteUser", userKey: userKey })
+      });
+      const result = await response.json();
+      
+      if (result.status === "error") {
+        showToast(result.message, "error");
+        return;
+      }
+      
+      showToast(`${studentName} 학생 계정 및 모든 제출물이 성공적으로 삭제되었습니다.`, "success");
+      
+      // 젭퀴즈 데이터 리로드
+      await fetchZepQuizDataAndRender();
+      
+      // 드릴다운 뷰 리프레시
+      openZepDrilldown(grade, classNum);
+      
+    } catch (err) {
+      console.error("ZepQuiz user delete failed:", err);
+      showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+    }
+  } else {
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+  }
+};
+
+// 드롭다운 외부 클릭 시 자동으로 닫히도록 하는 전역 클릭 핸들러 등록
+document.addEventListener("click", function() {
+  const allMenus = document.querySelectorAll(".zep-admin-dropdown-menu");
+  allMenus.forEach(menu => {
+    menu.style.display = "none";
+  });
+});
 
 window.closeZepDrilldown = function() {
   const drilldownArea = document.getElementById("admin-zep-drilldown-area");
@@ -7074,6 +7145,60 @@ function doPost(e) {
         response = { status: "success", message: "삭제 완료" };
       } else {
         response = { status: "error", message: "삭제 대상을 찾을 수 없음" };
+      }
+    }
+    
+    // 5.5. 회원 계정 영구 삭제 액션 (Users 시트 + Submissions 시트 연쇄 삭제 및 드라이브 파일 정리)
+    else if (requestData.action === "deleteUser") {
+      var usersSheet = ss.getSheetByName("Users");
+      var subsSheet = ss.getSheetByName("Submissions");
+      var userKey = requestData.userKey;
+      var deleted = false;
+      
+      // 1단계: Users 시트에서 해당 계정 삭제
+      if (usersSheet) {
+        var userData = usersSheet.getDataRange().getValues();
+        var userStartIndex = getStartIndex(userData, "UserKey");
+        for (var i = userData.length - 1; i >= userStartIndex; i--) {
+          if (userData[i][0] === userKey) {
+            usersSheet.deleteRow(i + 1);
+            deleted = true;
+          }
+        }
+      }
+      
+      // 2단계: Submissions 시트에서 해당 학생이 제출한 모든 작품 삭제 및 드라이브 파일 정리
+      if (subsSheet) {
+        var subData = subsSheet.getDataRange().getValues();
+        var subStartIndex = getStartIndex(subData, "ID");
+        for (var i = subData.length - 1; i >= subStartIndex; i--) {
+          if (subData[i][3] === userKey) {
+            // 구글 드라이브 파일 연쇄 삭제
+            try {
+              var entryData = {};
+              try { 
+                entryData = JSON.parse(subData[i][9]); 
+              } catch(e) {
+                entryData = { image: subData[i][9] };
+              }
+              var fileUrl = entryData.image || entryData.audio || "";
+              var fileId = extractFileIdFromUrl(fileUrl);
+              if (fileId) {
+                DriveApp.getFileById(fileId).setTrashed(true);
+              }
+            } catch(fileErr) {
+              Logger.log("Failed to delete user file from drive: " + fileErr.toString());
+            }
+            
+            subsSheet.deleteRow(i + 1);
+          }
+        }
+      }
+      
+      if (deleted) {
+        response = { status: "success", message: "회원 탈퇴 및 관련 제출물 삭제 완료" };
+      } else {
+        response = { status: "error", message: "삭제할 회원 계정을 찾을 수 없음" };
       }
     }
     
