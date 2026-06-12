@@ -5493,7 +5493,8 @@ function renderAdminClassSelector() {
 
   container.style.display = "flex";
   let html = `<button class="admin-capsule active" data-class="all">전체 반</button>`;
-  for (let classNum = 1; classNum <= 3; classNum++) {
+  const maxClass = GRADE_CLASS_LIMITS[adminCurrentGradeFilter] || 3;
+  for (let classNum = 1; classNum <= maxClass; classNum++) {
     html += `<button class="admin-capsule" data-class="${classNum}">${classNum}반</button>`;
   }
   container.innerHTML = html;
@@ -7431,10 +7432,12 @@ function doPost(e) {
         }
       }
       
-      // 4. 학급별 빈 통계 뼈대 생성 (3~6학년, 1~3반)
+      // 4. 학급별 빈 통계 뼈대 생성 (실제 한도 반영)
       var classes = {};
+      var GRADE_CLASS_LIMITS = { 3: 6, 4: 7, 5: 6, 6: 5 };
       for (var g = 3; g <= 6; g++) {
-        for (var c = 1; c <= 3; c++) {
+        var maxClass = GRADE_CLASS_LIMITS[g] || 3;
+        for (var c = 1; c <= maxClass; c++) {
           var classKey = g + "-" + c;
           var configuredCount = classStudentCounts[classKey];
           classes[classKey] = {
