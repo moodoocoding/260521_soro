@@ -3140,25 +3140,48 @@ async function generateAICalligraphyCard() {
   
   img.onload = async () => {
     try {
-      // Ensure the selected font is fully loaded in the browser before drawing to Canvas
+      // ──────────────────────────────────────────────────────
+      // [Canvas 텍스트 폭 비교 방식] 폰트 실제 로딩 완료 검증
+      // display=swap 환경에서 document.fonts.check()가 폰트 미로드
+      // 상태에서도 true를 반환하는 문제를 근본적으로 해결합니다.
+      // Canvas measureText 폭이 시스템 폰트와 달라지는 순간을
+      // 감지하여 웹폰트가 메모리에 올라갔음을 물리적으로 확인합니다.
+      // ──────────────────────────────────────────────────────
       try {
-        // Extract the pure primary font family name without quotes or fallbacks (e.g., "'East Sea Dokdo', sans-serif" -> "East Sea Dokdo")
         const primaryFontFamily = selectedFont.split(',')[0].replace(/['"]/g, "").trim();
         console.log(`Loading webfont: "${primaryFontFamily}" (raw value: ${selectedFont})...`);
-        
-        await document.fonts.load(`44px "${primaryFontFamily}"`);
-        await document.fonts.ready;
-        
-        // Polling check: wait up to 1500ms until document.fonts.check returns true for this specific web font
-        let attempts = 0;
-        while (!document.fonts.check(`44px "${primaryFontFamily}"`) && attempts < 15) {
-          console.log(`Webfont "${primaryFontFamily}" is still downloading, waiting 100ms... (attempt ${attempts + 1}/15)`);
+
+        // 1단계: 브라우저에게 폰트 다운로드를 요청 (non-blocking)
+        document.fonts.load(`44px "${primaryFontFamily}"`).catch(() => {});
+
+        // 2단계: 숨겨진 Canvas에서 텍스트 폭 비교로 실제 로딩 완료를 검증
+        const testCanvas = document.createElement("canvas");
+        const testCtx = testCanvas.getContext("2d");
+        const testStr = "가나다라마바사아자차카타파하 ABCDwWmM";
+
+        // 시스템 기본 폰트(monospace)의 텍스트 폭을 기준선으로 측정
+        testCtx.font = '44px monospace';
+        const fallbackWidth = testCtx.measureText(testStr).width;
+
+        let fontLoaded = false;
+        for (let i = 0; i < 50; i++) { // 최대 5초 대기 (100ms × 50회)
+          testCtx.font = `44px "${primaryFontFamily}", monospace`;
+          const currentWidth = testCtx.measureText(testStr).width;
+
+          if (currentWidth !== fallbackWidth) {
+            fontLoaded = true;
+            console.log(`✅ Webfont "${primaryFontFamily}" 로드 확인 완료! (${i * 100}ms 소요, 폭 차이: ${Math.abs(currentWidth - fallbackWidth).toFixed(1)}px)`);
+            break;
+          }
           await new Promise(resolve => setTimeout(resolve, 100));
-          attempts++;
         }
-        
-        // Final fallback micro-delay to let the font engine register it in canvas context
-        await new Promise(resolve => setTimeout(resolve, 150));
+
+        if (!fontLoaded) {
+          console.warn(`⚠️ Webfont "${primaryFontFamily}" 5초 내 로드 실패, 시스템 대체 폰트로 렌더링합니다.`);
+        }
+
+        // 3단계: 폰트 엔진 안정화를 위한 마이크로 딜레이
+        await new Promise(resolve => setTimeout(resolve, 50));
         console.log(`Webfont "${primaryFontFamily}" is ready to render!`);
       } catch (fontErr) {
         console.warn("Font loading failed, falling back to system font:", fontErr);
