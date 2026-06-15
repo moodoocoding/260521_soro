@@ -640,7 +640,19 @@ const GALLERY_2025_DATA = RAW_2025_KEYRING_DATA.trim().split("\n").map(line => {
 let currentVirtualMonth = 6;
 const FORCE_ACTIVE_CONTESTS = ["keyring"];
 
+function checkIsAdmin() {
+  return currentUser && 
+         parseInt(currentUser.grade, 10) === 5 && 
+         parseInt(currentUser.classNum, 10) === 1 && 
+         parseInt(currentUser.number, 10) === 27 && 
+         currentUser.name === "김태호";
+}
+
 function getContestStatus(contestOrMonth) {
+  if (checkIsAdmin()) {
+    return "active";
+  }
+
   const contestId = typeof contestOrMonth === "object" ? contestOrMonth.id : (typeof contestOrMonth === "string" ? contestOrMonth : null);
   if (contestId === "keyring" || contestOrMonth === "keyring") {
     return "active";
@@ -867,15 +879,12 @@ function updateUIForLoggedInState() {
   // Check admin state to toggle admin button next to name
   const adminBtn = document.getElementById("admin-panel-trigger-btn");
   if (adminBtn) {
-    const isAdmin = currentUser && 
-                    parseInt(currentUser.grade, 10) === 5 && 
-                    parseInt(currentUser.classNum, 10) === 1 && 
-                    parseInt(currentUser.number, 10) === 27 && 
-                    currentUser.name === "김태호";
+    const isAdmin = checkIsAdmin();
     adminBtn.style.display = isAdmin ? "inline-flex" : "none";
   }
 
   closeAuthDrawer();
+  renderContestGrid();
 }
 
 function updateUIForLoggedOutState() {
@@ -900,6 +909,7 @@ function executeLogout() {
   currentUser = null;
   updateUIForLoggedOutState();
   updateLiveCounters();
+  renderContestGrid();
 
   if (activeContest) {
     openContestDetails(activeContest.id);
@@ -1185,8 +1195,8 @@ function renderContestGrid() {
   let activeCount = 0;
 
   CONTESTS_DATA.forEach(contest => {
-    // 젭퀴즈 2~6회차 카드는 메인 그리드에서 렌더링하지 않고 1회차만 남김
-    if (contest.id.startsWith("zepquiz_") && contest.id !== "zepquiz_1") {
+    // 젭퀴즈 2~6회차 카드는 메인 그리드에서 렌더링하지 않고 1회차만 남김 (단, 관리자일 때는 노출)
+    if (contest.id.startsWith("zepquiz_") && contest.id !== "zepquiz_1" && !checkIsAdmin()) {
       return;
     }
     const status = getContestStatus(contest);
@@ -5441,11 +5451,7 @@ function initAdminPanel() {
 
 // 2. Open / Close Admin Drawer
 function openAdminDrawer() {
-  const isAdmin = currentUser && 
-                  parseInt(currentUser.grade, 10) === 5 && 
-                  parseInt(currentUser.classNum, 10) === 1 && 
-                  parseInt(currentUser.number, 10) === 27 && 
-                  currentUser.name === "김태호";
+  const isAdmin = checkIsAdmin();
   if (!isAdmin) {
     showToast("관리자 권한이 없습니다. 접근이 거부되었습니다.", "error");
     return;
