@@ -24,7 +24,10 @@ async function fetchContestLocks() {
     if (result.status === "success") {
       contestLocks = result.data || {};
       if (result.activeRound) {
-        currentActiveZepRound = result.activeRound.toString();
+        // 서버에서 예전 1회차가 돌아오더라도 현재 진행 중인 2회차 이상이 유지되도록 보정
+        const parsedRound = parseInt(result.activeRound, 10);
+        currentActiveZepRound = (isNaN(parsedRound) || parsedRound < 2 ? 2 : parsedRound).toString();
+        
         // Sync adminSelectedZepRound initial state with current active round
         adminSelectedZepRound = `zepquiz_${currentActiveZepRound}`;
         const roundSelect = document.getElementById("admin-zep-round-select");
@@ -36,6 +39,7 @@ async function fetchContestLocks() {
           activeLabel.textContent = `${currentActiveZepRound}회차`;
         }
       }
+      renderContestGrid();
     }
   } catch (e) {
     console.error("Failed to fetch contest locks:", e);
