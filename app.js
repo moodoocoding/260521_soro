@@ -633,15 +633,7 @@ const GALLERY_2025_DATA = RAW_2025_KEYRING_DATA.trim().split("\n").map(line => {
 // STATE MANAGEMENT & USER SESSION CONFIGURATION
 // ====================================================
 let currentVirtualMonth = 6;
-const FORCE_ACTIVE_CONTESTS = ["keyring", "cuttoon"];
-
-function checkIsAdmin() {
-  return currentUser && 
-         parseInt(currentUser.grade, 10) === 5 && 
-         parseInt(currentUser.classNum, 10) === 1 && 
-         parseInt(currentUser.number, 10) === 27 && 
-         currentUser.name === "김태호";
-}
+const FORCE_ACTIVE_CONTESTS = ["cuttoon"];
 
 function checkIsAdmin() {
   return currentUser && 
@@ -657,7 +649,7 @@ function getContestStatus(contestOrMonth) {
   }
 
   const contestId = typeof contestOrMonth === "object" ? contestOrMonth.id : (typeof contestOrMonth === "string" ? contestOrMonth : null);
-  if (contestId === "keyring" || contestOrMonth === "keyring" || contestId === "cuttoon" || contestOrMonth === "cuttoon") {
+  if (contestId === "cuttoon" || contestOrMonth === "cuttoon") {
     return "active";
   }
   
