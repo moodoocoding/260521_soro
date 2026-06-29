@@ -9,7 +9,7 @@ const GOOGLE_SHEET_API_URL = atob(SECURE_API_ENCODED);
 let contestLocks = {};
 
 // ZepQuiz multi-round management state variables
-let currentActiveZepRound = "1"; // Currently active round for student submissions
+let currentActiveZepRound = "2"; // Currently active round for student submissions
 let adminSelectedZepRound = "zepquiz_1"; // Selected round in admin dashboard view
 
 async function fetchContestLocks() {
@@ -1198,8 +1198,8 @@ function renderContestGrid() {
   let activeCount = 0;
 
   CONTESTS_DATA.forEach(contest => {
-    // 젭퀴즈 2~6회차 카드는 메인 그리드에서 렌더링하지 않고 1회차만 남김 (관리자는 전부 노출)
-    if (contest.id.startsWith("zepquiz_") && contest.id !== "zepquiz_1" && !checkIsAdmin()) {
+    // 젭퀴즈 회차 카드는 현재 활성화된 회차만 메인 그리드에 남김 (관리자는 전부 노출)
+    if (contest.id.startsWith("zepquiz_") && contest.id !== `zepquiz_${currentActiveZepRound}` && !checkIsAdmin()) {
       return;
     }
     const status = getContestStatus(contest);
