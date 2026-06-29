@@ -82,28 +82,27 @@ const CONTESTS_DATA = [
   },
   {
     id: "zepquiz_1",
-    title: "저작권 퀴즈 (1회차)",
+    title: "Zep quiz(1회차)",
     month: 6,
     monthText: "6월",
     period: "2026. 6. 1.(월) ~ 2026. 6. 30.(화)",
-    summary: "zepquiz에 접속하여 저작권 문제를 풀고 완료 스크린샷을 찍어서 업로드하세요!",
-    description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 최종 완료 화면(점수 또는 완료 문구가 보이는 화면)을 캡처하여 증빙 자료로 업로드해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
+    summary: "zepquiz에 접속하여 저작권 문제를 풀고, 완료 후 아래에서 참여 확인 버튼을 눌러주세요!",
+    description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 완료 후 아래의 <strong>'참여 완료' 버튼</strong>을 눌러 참가를 확인해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
     rules: [
       "참가 대상: 본교 3~6학년 학생 누구나",
       "퀴즈 내용: 저작권",
-      "제한 사항: <strong style=\"color: #e63946;\">학교 구글 아이디로 로그인하여 문제 풀 것 (★반드시 로그인 후 풀이에 응해야 인정됩니다!)</strong>",
-      "제출물: 젭퀴즈를 다 푼 완료 화면 스크린샷",
+      "제한 사항: <strong style=\"color: #e63946;\">학교 구글 아이디로 로그인하여 문제 풀 것</strong>",
+      "참여 방법: 퀴즈를 다 풀면 아래 '참여 완료' 버튼을 클릭",
       "특별 혜택: 학급 모든 친구가 제출할 경우 과자 지급",
-      "젭퀴즈 링크: <a href=\"https://quiz.zep.us/play/R53q9r\" target=\"_blank\" class=\"contest-link\" onclick=\"alert('⚠️ 반드시 학교 구글 아이디로 로그인한 후 문제를 풀어야 제출이 인정됩니다!'); alert('📸 문제를 다 푼 후 완료 화면 스크린샷을 찍어서 제출해 주세요!');\">zepquiz 바로가기 (https://quiz.zep.us/play/R53q9r)</a>"
+      "젭퀴즈 링크: <a href=\"https://quiz.zep.us/play/R53q9r\" target=\"_blank\" class=\"contest-link\" onclick=\"alert('⚠️ 반드시 학교 구글 아이디로 로그인한 후 문제를 풀어야 제출이 인정됩니다!');\">zepquiz 바로가기 (https://quiz.zep.us/play/R53q9r)</a>"
     ],
     evaluationCriteria: [
-      { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "50%" },
-      { category: "본인 인증", desc: "완료 화면에서 본인의 참여 내역을 확인할 수 있는 정보를 식별합니다.", weight: "30%" },
-      { category: "성실성", desc: "기간 내 퀴즈를 누락 없이 제출했는지 평가합니다.", weight: "20%" }
+      { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "60%" },
+      { category: "성실성", desc: "기간 내 퀴즈를 누락 없이 제출했는지 평가합니다.", weight: "40%" }
     ],
-    submissionType: "image",
-    inputLabel: "퀴즈 완료 스크린샷 캡처본",
-    placeholder: "PNG, JPG 형식의 이미지 파일 (최대 5MB)",
+    submissionType: "confirm",
+    inputLabel: "퀴즈 참여 확인",
+    placeholder: "",
     icon: `<svg class="card-visual-svg" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <rect x="10" y="6" width="44" height="52" rx="5" />
       <path d="M20 18h24M20 28h24M20 38h14" />
@@ -113,28 +112,28 @@ const CONTESTS_DATA = [
   },
   {
     id: "zepquiz_2",
-    title: "저작권 퀴즈 (2회차)",
+    title: "Zep quiz(2회차)",
     month: 7,
     monthText: "7월",
-    period: "추후 안내 예정",
-    summary: "zepquiz에 접속하여 저작권 문제를 풀고 완료 스크린샷을 찍어서 업로드하세요!",
-    description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 최종 완료 화면(점수 또는 완료 문구가 보이는 화면)을 캡처하여 증빙 자료로 업로드해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
+    period: "2026. 6. 29.(월) ~ 2026. 7. 14.(화)",
+    summary: "zepquiz에 접속하여 사이버 중독 예방 문제를 풀고, 완료 후 아래에서 참여 확인 버튼을 눌러주세요!",
+    description: "사이버 중독 예방에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 완료 후 아래의 <strong>'참여 완료' 버튼</strong>을 눌러 참가를 확인해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
     rules: [
       "참가 대상: 본교 3~6학년 학생 누구나",
-      "퀴즈 내용: 저작권",
-      "제한 사항: <strong style=\"color: #e63946;\">학교 구글 아이디로 로그인하여 문제 풀 것 (★반드시 로그인 후 풀이에 응해야 인정됩니다!)</strong>",
-      "제출물: 젭퀴즈를 다 푼 완료 화면 스크린샷",
+      "퀴즈 내용: 사이버 중독 예방",
+      "제한 사항: <strong style=\"color: #e63946;\">학교 구글 아이디로 로그인하여 문제 풀 것</strong>",
+      "참여 방법: 퀴즈를 다 풀면 아래 '참여 완료' 버튼을 클릭",
       "특별 혜택: 학급 모든 친구가 제출할 경우 과자 지급",
-      "젭퀴즈 링크: <span class=\"contest-link-disabled\" style=\"color: #808088; font-style: italic;\">젭퀴즈 2회차 링크는 아직 등록되지 않았습니다 (준비 중).</span>"
+      "젭퀴즈 링크 (5·6학년): <a href=\"https://quiz.zep.us/play/3P9JEw\" target=\"_blank\" class=\"contest-link\" onclick=\"alert('⚠️ 반드시 학교 구글 아이디로 로그인한 후 문제를 풀어야 제출이 인정됩니다!');\">5·6학년 전용 zepquiz 바로가기</a>",
+      "젭퀴즈 링크 (3·4학년): <a href=\"https://quiz.zep.us/play/BjYRGq\" target=\"_blank\" class=\"contest-link\" onclick=\"alert('⚠️ 반드시 학교 구글 아이디로 로그인한 후 문제를 풀어야 제출이 인정됩니다!');\">3·4학년 전용 zepquiz 바로가기</a>"
     ],
     evaluationCriteria: [
-      { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "50%" },
-      { category: "본인 인증", desc: "완료 화면에서 본인의 참여 내역을 확인할 수 있는 정보를 식별합니다.", weight: "30%" },
-      { category: "성실성", desc: "기간 내 퀴즈를 누락 없이 제출했는지 평가합니다.", weight: "20%" }
+      { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "60%" },
+      { category: "성실성", desc: "기간 내 퀴즈를 누락 없이 제출했는지 평가합니다.", weight: "40%" }
     ],
-    submissionType: "image",
-    inputLabel: "퀴즈 완료 스크린샷 캡처본",
-    placeholder: "PNG, JPG 형식의 이미지 파일 (최대 5MB)",
+    submissionType: "confirm",
+    inputLabel: "퀴즈 참여 확인",
+    placeholder: "",
     icon: `<svg class="card-visual-svg" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <rect x="10" y="6" width="44" height="52" rx="5" />
       <path d="M20 18h24M20 28h24M20 38h14" />
@@ -144,28 +143,27 @@ const CONTESTS_DATA = [
   },
   {
     id: "zepquiz_3",
-    title: "저작권 퀴즈 (3회차)",
+    title: "Zep quiz(3회차)",
     month: 9,
     monthText: "9월",
     period: "추후 안내 예정",
-    summary: "zepquiz에 접속하여 저작권 문제를 풀고 완료 스크린샷을 찍어서 업로드하세요!",
-    description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 최종 완료 화면(점수 또는 완료 문구가 보이는 화면)을 캡처하여 증빙 자료로 업로드해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
+    summary: "zepquiz에 접속하여 저작권 문제를 풀고, 완료 후 아래에서 참여 확인 버튼을 눌러주세요!",
+    description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 완료 후 아래의 <strong>'참여 완료' 버튼</strong>을 눌러 참가를 확인해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
     rules: [
       "참가 대상: 본교 3~6학년 학생 누구나",
       "퀴즈 내용: 저작권",
-      "제한 사항: <strong style=\"color: #e63946;\">학교 구글 아이디로 로그인하여 문제 풀 것 (★반드시 로그인 후 풀이에 응해야 인정됩니다!)</strong>",
-      "제출물: 젭퀴즈를 다 푼 완료 화면 스크린샷",
+      "제한 사항: <strong style=\"color: #e63946;\">학교 구글 아이디로 로그인하여 문제 풀 것</strong>",
+      "참여 방법: 퀴즈를 다 풀면 아래 '참여 완료' 버튼을 클릭",
       "특별 혜택: 학급 모든 친구가 제출할 경우 과자 지급",
       "젭퀴즈 링크: <span class=\"contest-link-disabled\" style=\"color: #808088; font-style: italic;\">젭퀴즈 3회차 링크는 아직 등록되지 않았습니다 (준비 중).</span>"
     ],
     evaluationCriteria: [
-      { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "50%" },
-      { category: "본인 인증", desc: "완료 화면에서 본인의 참여 내역을 확인할 수 있는 정보를 식별합니다.", weight: "30%" },
-      { category: "성실성", desc: "기간 내 퀴즈를 누락 없이 제출했는지 평가합니다.", weight: "20%" }
+      { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "60%" },
+      { category: "성실성", desc: "기간 내 퀴즈를 누락 없이 제출했는지 평가합니다.", weight: "40%" }
     ],
-    submissionType: "image",
-    inputLabel: "퀴즈 완료 스크린샷 캡처본",
-    placeholder: "PNG, JPG 형식의 이미지 파일 (최대 5MB)",
+    submissionType: "confirm",
+    inputLabel: "퀴즈 참여 확인",
+    placeholder: "",
     icon: `<svg class="card-visual-svg" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <rect x="10" y="6" width="44" height="52" rx="5" />
       <path d="M20 18h24M20 28h24M20 38h14" />
@@ -175,28 +173,27 @@ const CONTESTS_DATA = [
   },
   {
     id: "zepquiz_4",
-    title: "저작권 퀴즈 (4회차)",
+    title: "Zep quiz(4회차)",
     month: 10,
     monthText: "10월",
     period: "추후 안내 예정",
-    summary: "zepquiz에 접속하여 저작권 문제를 풀고 완료 스크린샷을 찍어서 업로드하세요!",
-    description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 최종 완료 화면(점수 또는 완료 문구가 보이는 화면)을 캡처하여 증빙 자료로 업로드해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
+    summary: "zepquiz에 접속하여 저작권 문제를 풀고, 완료 후 아래에서 참여 확인 버튼을 눌러주세요!",
+    description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 완료 후 아래의 <strong>'참여 완료' 버튼</strong>을 눌러 참가를 확인해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
     rules: [
       "참가 대상: 본교 3~6학년 학생 누구나",
       "퀴즈 내용: 저작권",
-      "제한 사항: <strong style=\"color: #e63946;\">학교 구글 아이디로 로그인하여 문제 풀 것 (★반드시 로그인 후 풀이에 응해야 인정됩니다!)</strong>",
-      "제출물: 젭퀴즈를 다 푼 완료 화면 스크린샷",
+      "제한 사항: <strong style=\"color: #e63946;\">학교 구글 아이디로 로그인하여 문제 풀 것</strong>",
+      "참여 방법: 퀴즈를 다 풀면 아래 '참여 완료' 버튼을 클릭",
       "특별 혜택: 학급 모든 친구가 제출할 경우 과자 지급",
       "젭퀴즈 링크: <span class=\"contest-link-disabled\" style=\"color: #808088; font-style: italic;\">젭퀴즈 4회차 링크는 아직 등록되지 않았습니다 (준비 중).</span>"
     ],
     evaluationCriteria: [
-      { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "50%" },
-      { category: "본인 인증", desc: "완료 화면에서 본인의 참여 내역을 확인할 수 있는 정보를 식별합니다.", weight: "30%" },
-      { category: "성실성", desc: "기간 내 퀴즈를 누락 없이 제출했는지 평가합니다.", weight: "20%" }
+      { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "60%" },
+      { category: "성실성", desc: "기간 내 퀴즈를 누락 없이 제출했는지 평가합니다.", weight: "40%" }
     ],
-    submissionType: "image",
-    inputLabel: "퀴즈 완료 스크린샷 캡처본",
-    placeholder: "PNG, JPG 형식의 이미지 파일 (최대 5MB)",
+    submissionType: "confirm",
+    inputLabel: "퀴즈 참여 확인",
+    placeholder: "",
     icon: `<svg class="card-visual-svg" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <rect x="10" y="6" width="44" height="52" rx="5" />
       <path d="M20 18h24M20 28h24M20 38h14" />
@@ -206,28 +203,27 @@ const CONTESTS_DATA = [
   },
   {
     id: "zepquiz_5",
-    title: "저작권 퀴즈 (5회차)",
+    title: "Zep quiz(5회차)",
     month: 11,
     monthText: "11월",
     period: "추후 안내 예정",
-    summary: "zepquiz에 접속하여 저작권 문제를 풀고 완료 스크린샷을 찍어서 업로드하세요!",
-    description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 최종 완료 화면(점수 또는 완료 문구가 보이는 화면)을 캡처하여 증빙 자료로 업로드해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
+    summary: "zepquiz에 접속하여 저작권 문제를 풀고, 완료 후 아래에서 참여 확인 버튼을 눌러주세요!",
+    description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 완료 후 아래의 <strong>'참여 완료' 버튼</strong>을 눌러 참가를 확인해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
     rules: [
       "참가 대상: 본교 3~6학년 학생 누구나",
       "퀴즈 내용: 저작권",
-      "제한 사항: <strong style=\"color: #e63946;\">학교 구글 아이디로 로그인하여 문제 풀 것 (★반드시 로그인 후 풀이에 응해야 인정됩니다!)</strong>",
-      "제출물: 젭퀴즈를 다 푼 완료 화면 스크린샷",
+      "제한 사항: <strong style=\"color: #e63946;\">학교 구글 아이디로 로그인하여 문제 풀 것</strong>",
+      "참여 방법: 퀴즈를 다 풀면 아래 '참여 완료' 버튼을 클릭",
       "특별 혜택: 학급 모든 친구가 제출할 경우 과자 지급",
       "젭퀴즈 링크: <span class=\"contest-link-disabled\" style=\"color: #808088; font-style: italic;\">젭퀴즈 5회차 링크는 아직 등록되지 않았습니다 (준비 중).</span>"
     ],
     evaluationCriteria: [
-      { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "50%" },
-      { category: "본인 인증", desc: "완료 화면에서 본인의 참여 내역을 확인할 수 있는 정보를 식별합니다.", weight: "30%" },
-      { category: "성실성", desc: "기간 내 퀴즈를 누락 없이 제출했는지 평가합니다.", weight: "20%" }
+      { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "60%" },
+      { category: "성실성", desc: "기간 내 퀴즈를 누락 없이 제출했는지 평가합니다.", weight: "40%" }
     ],
-    submissionType: "image",
-    inputLabel: "퀴즈 완료 스크린샷 캡처본",
-    placeholder: "PNG, JPG 형식의 이미지 파일 (최대 5MB)",
+    submissionType: "confirm",
+    inputLabel: "퀴즈 참여 확인",
+    placeholder: "",
     icon: `<svg class="card-visual-svg" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <rect x="10" y="6" width="44" height="52" rx="5" />
       <path d="M20 18h24M20 28h24M20 38h14" />
@@ -237,28 +233,27 @@ const CONTESTS_DATA = [
   },
   {
     id: "zepquiz_6",
-    title: "저작권 퀴즈 (6회차)",
+    title: "Zep quiz(6회차)",
     month: 12,
     monthText: "12월",
     period: "추후 안내 예정",
-    summary: "zepquiz에 접속하여 저작권 문제를 풀고 완료 스크린샷을 찍어서 업로드하세요!",
-    description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 최종 완료 화면(점수 또는 완료 문구가 보이는 화면)을 캡처하여 증빙 자료로 업로드해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
+    summary: "zepquiz에 접속하여 저작권 문제를 풀고, 완료 후 아래에서 참여 확인 버튼을 눌러주세요!",
+    description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 완료 후 아래의 <strong>'참여 완료' 버튼</strong>을 눌러 참가를 확인해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
     rules: [
       "참가 대상: 본교 3~6학년 학생 누구나",
       "퀴즈 내용: 저작권",
-      "제한 사항: <strong style=\"color: #e63946;\">학교 구글 아이디로 로그인하여 문제 풀 것 (★반드시 로그인 후 풀이에 응해야 인정됩니다!)</strong>",
-      "제출물: 젭퀴즈를 다 푼 완료 화면 스크린샷",
+      "제한 사항: <strong style=\"color: #e63946;\">학교 구글 아이디로 로그인하여 문제 풀 것</strong>",
+      "참여 방법: 퀴즈를 다 풀면 아래 '참여 완료' 버튼을 클릭",
       "특별 혜택: 학급 모든 친구가 제출할 경우 과자 지급",
       "젭퀴즈 링크: <span class=\"contest-link-disabled\" style=\"color: #808088; font-style: italic;\">젭퀴즈 6회차 링크는 아직 등록되지 않았습니다 (준비 중).</span>"
     ],
     evaluationCriteria: [
-      { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "50%" },
-      { category: "본인 인증", desc: "완료 화면에서 본인의 참여 내역을 확인할 수 있는 정보를 식별합니다.", weight: "30%" },
-      { category: "성실성", desc: "기간 내 퀴즈를 누락 없이 제출했는지 평가합니다.", weight: "20%" }
+      { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "60%" },
+      { category: "성실성", desc: "기간 내 퀴즈를 누락 없이 제출했는지 평가합니다.", weight: "40%" }
     ],
-    submissionType: "image",
-    inputLabel: "퀴즈 완료 스크린샷 캡처본",
-    placeholder: "PNG, JPG 형식의 이미지 파일 (최대 5MB)",
+    submissionType: "confirm",
+    inputLabel: "퀴즈 참여 확인",
+    placeholder: "",
     icon: `<svg class="card-visual-svg" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <rect x="10" y="6" width="44" height="52" rx="5" />
       <path d="M20 18h24M20 28h24M20 38h14" />
@@ -272,7 +267,7 @@ const CONTESTS_DATA = [
     month: 7,
     monthText: "7월",
     activeMonths: [7],
-    period: "2026. 6. 15.(월) ~ 2026. 7. 03.(월)",
+    period: "2026. 6. 29.(월) ~ 2026. 7. 14.(화)",
     summary: "일상 속 안전의 중요성을 재미있고 유익한 4컷 만화로 표현해보세요.",
     description: "학교, 가정, 길거리 등 일상생활 속에서 일어날 수 있는 다양한 안전사고(교통안전, 실험실 안전, 미끄러짐 등)를 예방하기 위한 수칙이나 경각심을 주는 스토리를 4컷~8컷 만화로 공모합니다.",
     rules: [
@@ -638,11 +633,23 @@ const GALLERY_2025_DATA = RAW_2025_KEYRING_DATA.trim().split("\n").map(line => {
 // STATE MANAGEMENT & USER SESSION CONFIGURATION
 // ====================================================
 let currentVirtualMonth = 6;
-const FORCE_ACTIVE_CONTESTS = ["keyring"];
+const FORCE_ACTIVE_CONTESTS = ["keyring", "cuttoon"];
+
+function checkIsAdmin() {
+  return currentUser && 
+         parseInt(currentUser.grade, 10) === 5 && 
+         parseInt(currentUser.classNum, 10) === 1 && 
+         parseInt(currentUser.number, 10) === 27 && 
+         currentUser.name === "김태호";
+}
 
 function getContestStatus(contestOrMonth) {
+  if (checkIsAdmin()) {
+    return "active";
+  }
+
   const contestId = typeof contestOrMonth === "object" ? contestOrMonth.id : (typeof contestOrMonth === "string" ? contestOrMonth : null);
-  if (contestId === "keyring" || contestOrMonth === "keyring") {
+  if (contestId === "keyring" || contestOrMonth === "keyring" || contestId === "cuttoon" || contestOrMonth === "cuttoon") {
     return "active";
   }
   
@@ -867,15 +874,11 @@ function updateUIForLoggedInState() {
   // Check admin state to toggle admin button next to name
   const adminBtn = document.getElementById("admin-panel-trigger-btn");
   if (adminBtn) {
-    const isAdmin = currentUser && 
-                    parseInt(currentUser.grade, 10) === 5 && 
-                    parseInt(currentUser.classNum, 10) === 1 && 
-                    parseInt(currentUser.number, 10) === 27 && 
-                    currentUser.name === "김태호";
-    adminBtn.style.display = isAdmin ? "inline-flex" : "none";
+    adminBtn.style.display = checkIsAdmin() ? "inline-flex" : "none";
   }
 
   closeAuthDrawer();
+  renderContestGrid();
 }
 
 function updateUIForLoggedOutState() {
@@ -906,6 +909,7 @@ function executeLogout() {
   }
 
   showToast("로그아웃 되었습니다.", "info");
+  renderContestGrid();
 }
 
 // SHA-256 단방향 암호화 해싱 함수 (Web Crypto API 사용)
@@ -1185,8 +1189,8 @@ function renderContestGrid() {
   let activeCount = 0;
 
   CONTESTS_DATA.forEach(contest => {
-    // 젭퀴즈 2~6회차 카드는 메인 그리드에서 렌더링하지 않고 1회차만 남김
-    if (contest.id.startsWith("zepquiz_") && contest.id !== "zepquiz_1") {
+    // 젭퀴즈 2~6회차 카드는 메인 그리드에서 렌더링하지 않고 1회차만 남김 (관리자는 전부 노출)
+    if (contest.id.startsWith("zepquiz_") && contest.id !== "zepquiz_1" && !checkIsAdmin()) {
       return;
     }
     const status = getContestStatus(contest);
@@ -2412,17 +2416,24 @@ async function checkAndRenderSubmissionArea(contest) {
       `;
     }
 
+    const isZep = contest.id.startsWith("zepquiz");
+    const badgeText = isZep ? "✅ 참여 완료됨" : "🎨 접수 완료됨";
+    const noticeTitle = isZep ? "이 퀴즈 이벤트에 이미 참여하셨습니다." : "이 대회에 이미 작품을 제출하셨습니다.";
+    const noticeTimeLabel = isZep ? "참여 시각" : "제출 시각";
+    const actionInfo = isZep ? "⚠️ 새로 참여 확인을 하시려면, 기존 기록을 취소하셔야 합니다." : "⚠️ 다른 작품을 새로 제출하시려면, 기존 접수를 취소하셔야 합니다.";
+    const cancelBtnText = isZep ? "참여 취소하기" : "접수 취소하기 (영구 삭제)";
+
     viewDiv.innerHTML = `
-      <div class="submitted-badge-success">🎨 접수 완료됨</div>
-      <p class="submitted-notice-title">이 대회에 이미 작품을 제출하셨습니다.</p>
-      <p class="submitted-notice-time">제출 시각: ${existingSubmission.timestamp}</p>
+      <div class="submitted-badge-success">${badgeText}</div>
+      <p class="submitted-notice-title">${noticeTitle}</p>
+      <p class="submitted-notice-time">${noticeTimeLabel}: ${existingSubmission.timestamp}</p>
       
       ${contentHtml}
 
       <div class="submitted-actions">
-        <p class="submitted-actions-info">⚠️ 다른 작품을 새로 제출하시려면, 기존 접수를 취소하셔야 합니다.</p>
+        <p class="submitted-actions-info">${actionInfo}</p>
         <button type="button" class="btn btn-danger btn-block" onclick="cancelSubmissionInDrawer('${existingSubmission.id}')">
-          접수 취소하기 (영구 삭제)
+          ${cancelBtnText}
         </button>
       </div>
     `;
@@ -2494,7 +2505,18 @@ function setupDynamicFormFields(contest) {
   const container = document.getElementById("dynamic-fields-container");
   container.innerHTML = "";
   const submitBtn = document.getElementById("submit-btn");
-  if (submitBtn) submitBtn.style.display = contest.id === "pixelart" ? "none" : "block";
+  const formTitle = document.querySelector("#submission-form-container .form-title");
+
+  const isZep = contest.id.startsWith("zepquiz");
+
+  if (formTitle) {
+    formTitle.textContent = isZep ? "퀴즈 참여 확인하기" : "작품 접수하기";
+  }
+
+  if (submitBtn) {
+    submitBtn.style.display = contest.id === "pixelart" ? "none" : "block";
+    submitBtn.textContent = isZep ? "참여 완료하기" : "작품 제출 완료하기";
+  }
 
   if (contest.submissionType === "image" && contest.id === "pixelart") {
     // ===== PIXEL ART EXTENDED EDITOR UI =====
@@ -2729,6 +2751,35 @@ function setupDynamicFormFields(contest) {
       <span class="error-message">응모할 디자인 시안 이미지를 꼭 업로드해 주세요.</span>
     `;
     setupFileUploader();
+  }
+
+  else if (contest.submissionType === "confirm") {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 24px 16px;">
+        <div style="font-size: 3rem; margin-bottom: 12px;">✅</div>
+        <p style="font-size: 1rem; font-weight: bold; color: var(--text-primary); margin-bottom: 8px;">퀴즈를 다 풀었나요?</p>
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.5;">위의 젭퀴즈 링크에서 문제를 모두 풀었다면,<br>아래 버튼을 눌러 참여를 확인해 주세요.</p>
+        <label style="display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; padding: 12px; border: 2px solid var(--border-color); border-radius: 12px; background: var(--bg-tertiary); transition: all 0.3s ease; margin-bottom: 8px;" id="confirm-check-label">
+          <input type="checkbox" id="confirm-participation" style="width: 20px; height: 20px; accent-color: #10b981; cursor: pointer;">
+          <span style="font-size: 0.95rem; font-weight: 600; color: var(--text-primary);">네, Zep quiz를 모두 풀었습니다!</span>
+        </label>
+        <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px;">※ 체크 후 하단의 '제출 완료하기' 버튼을 눌러주세요.</p>
+      </div>
+    `;
+    // 체크박스 시각 피드백
+    const confirmCheckbox = document.getElementById('confirm-participation');
+    const confirmLabel = document.getElementById('confirm-check-label');
+    if (confirmCheckbox && confirmLabel) {
+      confirmCheckbox.addEventListener('change', () => {
+        if (confirmCheckbox.checked) {
+          confirmLabel.style.borderColor = '#10b981';
+          confirmLabel.style.background = 'rgba(16, 185, 129, 0.08)';
+        } else {
+          confirmLabel.style.borderColor = 'var(--border-color)';
+          confirmLabel.style.background = 'var(--bg-tertiary)';
+        }
+      });
+    }
   }
 
   else if (contest.submissionType === "audio") {
@@ -4727,6 +4778,16 @@ function validateSubmissionForm() {
     }
   }
 
+  else if (activeContest.submissionType === "confirm") {
+    const confirmBox = document.getElementById("confirm-participation");
+    if (!confirmBox || !confirmBox.checked) {
+      const label = document.getElementById("confirm-check-label");
+      if (label) { label.style.borderColor = '#e63946'; label.style.background = 'rgba(230, 57, 70, 0.06)'; }
+      showToast("퀴즈 참여 확인에 체크해 주세요.", "error");
+      isValid = false;
+    }
+  }
+
   else if (activeContest.submissionType === "audio") {
     if (!uploadBase64Data) {
       const dropzone = document.getElementById("file-dropzone");
@@ -4813,6 +4874,11 @@ async function executeSubmit() {
     newEntry.data.image = uploadBase64Data;
   }
 
+  else if (activeContest.submissionType === "confirm") {
+    newEntry.data.type = "confirm";
+    newEntry.data.confirmed = true;
+  }
+
   else if (activeContest.submissionType === "audio") {
     newEntry.data.audio = uploadBase64Data;
     newEntry.data.description = document.getElementById("sub-audio-description").value.trim();
@@ -4851,10 +4917,12 @@ async function executeSubmit() {
   let originalPixelDrawText = "작품 최종 제출";
   let originalPixelUploadText = "업로드 파일 제출하기";
 
+  const isZepSubmit = activeContest.id.startsWith("zepquiz");
+
   if (submitBtn) {
     originalBtnText = submitBtn.textContent;
     submitBtn.disabled = true;
-    submitBtn.textContent = "클라우드에 접수 중...";
+    submitBtn.textContent = isZepSubmit ? "클라우드에 확인 중..." : "클라우드에 접수 중...";
   }
   if (pixelDrawBtn) {
     originalPixelDrawText = pixelDrawBtn.innerHTML;
@@ -4868,7 +4936,7 @@ async function executeSubmit() {
   }
 
   if (GOOGLE_SHEET_API_URL) {
-    showToast("작품을 클라우드에 업로드 중...", "info");
+    showToast(isZepSubmit ? "퀴즈 참여 확인을 기록 중..." : "작품을 클라우드에 업로드 중...", "info");
     const payload = {
       action: "submitContest",
       entry: newEntry
@@ -4898,7 +4966,10 @@ async function executeSubmit() {
         return;
       }
 
-      showToast(`${activeContest.title} 대회의 작품 접수가 성공적으로 클라우드에 기록되었습니다! 🎨`, "success");
+      const successMsg = isZepSubmit 
+        ? `${activeContest.title} 이벤트 참여 확인이 성공적으로 기록되었습니다! ✅`
+        : `${activeContest.title} 대회의 작품 접수가 성공적으로 클라우드에 기록되었습니다! 🎨`;
+      showToast(successMsg, "success");
       closeContestDrawer();
       updateLiveCounters();
     } catch (e) {
