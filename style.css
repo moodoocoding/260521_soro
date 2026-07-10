@@ -4454,7 +4454,7 @@ body[data-admin-mode="zepquiz"] .zepquiz-gauge-track {
   display: flex;
   width: max-content;
   gap: 20px;
-  animation: scrollTicker 45s linear infinite;
+  animation: scrollTicker 120s linear infinite;
 }
 /* 호버 시 슬라이더 일시 정지 */
 .keyring-ticker-container:hover .keyring-ticker-track {

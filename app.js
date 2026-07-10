@@ -873,7 +873,7 @@ async function initKeyringGallery() {
 
     return `
       <div class="keyring-gallery-card" onclick="window.openImageModal('${item.rawUrl}')" title="${item.gradeClass} ${maskedName} 학생의 작품">
-        <img src="${item.imageUrl}" loading="lazy" alt="${maskedName} 학생의 키링 작품">
+        <img src="${item.imageUrl}" loading="lazy" alt="${maskedName} 학생의 키링 작품" onerror="const card = this.closest('.keyring-gallery-card'); if (card) card.remove();">
       </div>
     `;
   }).join("");
