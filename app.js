@@ -782,19 +782,101 @@ document.addEventListener("DOMContentLoaded", async () => {
   setTimeout(initKeyringGallery, 2000);
 });
 
-/* 🏆 2025 키링 명예의 전당 무한 캐러셀 초기화 */
-function initKeyringGallery() {
+/* 🏆 2026 키링 명예의 전당 무한 캐러셀 실시간 초기화 (미제출 시 2025 아카이브 백업 노출) */
+async function initKeyringGallery() {
   const track = document.getElementById("keyring-ticker-track");
-  if (!track || !GALLERY_2025_DATA || GALLERY_2025_DATA.length === 0) return;
+  if (!track) return;
 
-  // 좌우 스크롤이 끊김없이 루프되도록 데이터를 복제하여 채움
-  const doubleList = [...GALLERY_2025_DATA, ...GALLERY_2025_DATA];
+  let keyringImages = [];
 
-  track.innerHTML = doubleList.map(item => `
-    <div class="keyring-gallery-card" onclick="window.openImageModal('${item.imageUrl}')" title="${item.gradeClass} ${item.name} 학생의 작품">
-      <img src="${item.imageUrl}" loading="lazy" alt="${item.name} 학생의 키링 작품">
-    </div>
-  `).join("");
+  // 1. 구글 스프레드시트 API를 통해 2026년 실시간 키링 공모작 목록 조회
+  if (GOOGLE_SHEET_API_URL) {
+    try {
+      const response = await fetch(GOOGLE_SHEET_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: JSON.stringify({
+          action: "getAllSubmissions",
+          contestId: "keyring"
+        })
+      });
+      const result = await response.json();
+      if (result.status === "success" && Array.isArray(result.data)) {
+        // 중복 제거용 임시 맵 (학생당 가장 최근 1개 작품만 노출)
+        const latestSubmissionsMap = new Map();
+        result.data.forEach(entry => {
+          if (!entry) return;
+          const studentKey = entry.studentUsername ? entry.studentUsername.toLowerCase() : (entry.studentName ? entry.studentName.toLowerCase() : "");
+          if (studentKey) {
+            const existing = latestSubmissionsMap.get(studentKey);
+            if (!existing || new Date(entry.timestamp) > new Date(existing.timestamp)) {
+              latestSubmissionsMap.set(studentKey, entry);
+            }
+          } else {
+            latestSubmissionsMap.set(entry.id, entry);
+          }
+        });
+
+        // 수집된 최신 제출물에서 유효한 이미지 주소 추출
+        latestSubmissionsMap.forEach(entry => {
+          let dataObj = {};
+          if (typeof entry.data === "string") {
+            try { dataObj = JSON.parse(entry.data); } catch(e) {}
+          } else {
+            dataObj = entry.data || {};
+          }
+          let imageUrl = dataObj.image || "";
+          if (imageUrl && !imageUrl.includes("placehold.co") && !imageUrl.includes("No Image") && imageUrl.trim() !== "") {
+            keyringImages.push({
+              imageUrl: getGoogleDriveDirectLink(imageUrl),
+              name: entry.studentName || "학생",
+              gradeClass: `${entry.studentGrade}학년 ${entry.studentClass}반`,
+              rawUrl: imageUrl
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.warn("Failed to fetch 2026 keyring submissions, falling back to 2025 archive:", e);
+    }
+  }
+
+  // 2. 만약 2026년 실시간 제출 데이터가 없는 경우 2025 아카이브 백업 사용
+  if (keyringImages.length === 0) {
+    console.log("[Keyring Gallery] 2026 실시간 제출작이 없거나 지연되어 2025 아카이브 데이터를 노출합니다.");
+    if (typeof GALLERY_2025_DATA !== "undefined" && GALLERY_2025_DATA.length > 0) {
+      keyringImages = GALLERY_2025_DATA.map(item => ({
+        imageUrl: item.imageUrl,
+        name: item.name,
+        gradeClass: item.gradeClass,
+        rawUrl: item.imageUrl
+      }));
+    }
+  }
+
+  if (keyringImages.length === 0) {
+    track.innerHTML = `<div style="color: #a0a0aa; font-size: 0.85rem; padding: 20px; text-align: center; width: 100%;">공모작 갤러리를 불러올 수 없습니다. 🥺</div>`;
+    return;
+  }
+
+  // 3. 끊김없는 좌우 무한 흐름 루프를 위해 전체 목록을 복제하여 채움
+  const doubleList = [...keyringImages, ...keyringImages];
+
+  track.innerHTML = doubleList.map(item => {
+    // 개인정보 보호를 위한 이름 마스킹 처리 (예: 김태호 -> 김*호)
+    let maskedName = item.name || "학생";
+    if (maskedName.length > 2) {
+      maskedName = maskedName[0] + "*".repeat(maskedName.length - 2) + maskedName[maskedName.length - 1];
+    } else if (maskedName.length === 2) {
+      maskedName = maskedName[0] + "*";
+    }
+
+    return `
+      <div class="keyring-gallery-card" onclick="window.openImageModal('${item.rawUrl}')" title="${item.gradeClass} ${maskedName} 학생의 작품">
+        <img src="${item.imageUrl}" loading="lazy" alt="${maskedName} 학생의 키링 작품">
+      </div>
+    `;
+  }).join("");
 }
 
 // ====================================================
