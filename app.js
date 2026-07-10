@@ -767,18 +767,22 @@ function setupAuthFormDropdowns() {
   }
 }
 
-document.addEventListener("DOMContentLoaded", async () => {
+document.addEventListener("DOMContentLoaded", () => {
   initTheme();
   initVirtualTime();
   initUserSession();
-  await fetchContestLocks();
+  
+  // 1. 서버 락정보 대기 없이 카드 그리드 및 UI 즉시 초기화 (FCP 지연 차단)
   renderContestGrid();
   setupEventListeners();
   setupAuthFormDropdowns();
   updateLiveCounters();
   initAdminPanel();
   
-  // 메인 페이지 초기 로드 완료 2초 후에 키링 명예의 전당 갤러리 로딩 (성능 영향도 0%)
+  // 2. 스프레드시트 락 및 활성 회차 정보는 백그라운드에서 비동기로 수집 (수집 완료 시 리렌더링)
+  fetchContestLocks();
+  
+  // 3. 메인 페이지 초기 로드 완료 2초 후에 키링 명예의 전당 갤러리 로딩 (성능 영향도 0%)
   setTimeout(initKeyringGallery, 2000);
 });
 

@@ -2460,23 +2460,6 @@ body.light-theme .xp-bar-container {
 }
 
 /* User custom asset fonts */
-@font-face {
-  font-family: 'CustomFont1';
-  src: url('asset/fonts/custom1.ttf') format('truetype'),
-       url('asset/fonts/custom1.otf') format('opentype'),
-       url('asset/fonts/custom1.woff') format('woff'),
-       url('asset/fonts/custom1.woff2') format('woff2');
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'CustomFont2';
-  src: url('asset/fonts/custom2.ttf') format('truetype'),
-       url('asset/fonts/custom2.otf') format('opentype'),
-       url('asset/fonts/custom2.woff') format('woff'),
-       url('asset/fonts/custom2.woff2') format('woff2');
-  font-display: swap;
-}
 
 /* ====================================================
    POSTCARD 4:3 RATIO & DIGITAL DID EXHIBITION STYLING
