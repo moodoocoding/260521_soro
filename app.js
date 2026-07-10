@@ -777,7 +777,25 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupAuthFormDropdowns();
   updateLiveCounters();
   initAdminPanel();
+  
+  // 메인 페이지 초기 로드 완료 2초 후에 키링 명예의 전당 갤러리 로딩 (성능 영향도 0%)
+  setTimeout(initKeyringGallery, 2000);
 });
+
+/* 🏆 2025 키링 명예의 전당 무한 캐러셀 초기화 */
+function initKeyringGallery() {
+  const track = document.getElementById("keyring-ticker-track");
+  if (!track || !GALLERY_2025_DATA || GALLERY_2025_DATA.length === 0) return;
+
+  // 좌우 스크롤이 끊김없이 루프되도록 데이터를 복제하여 채움
+  const doubleList = [...GALLERY_2025_DATA, ...GALLERY_2025_DATA];
+
+  track.innerHTML = doubleList.map(item => `
+    <div class="keyring-gallery-card" onclick="window.openImageModal('${item.imageUrl}')" title="${item.gradeClass} ${item.name} 학생의 작품">
+      <img src="${item.imageUrl}" loading="lazy" alt="${item.name} 학생의 키링 작품">
+    </div>
+  `).join("");
+}
 
 // ====================================================
 // THEME SWITCHER
