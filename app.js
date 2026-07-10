@@ -688,6 +688,9 @@ function getContestStatus(contestOrMonth) {
 let activeContest = null;
 let uploadBase64Data = null;
 
+// 사은품 지급 상태 보존용 임시 저장소 (접수 취소 → 재제출 시 prizeStatus 유실 방지)
+const _preservedPrizeStatus = new Map();
+
 // User Authentication States
 let currentUser = null;
 let GOOGLE_SHEET_API_URL_error = false;
@@ -2452,6 +2455,28 @@ async function checkAndRenderSubmissionArea(contest) {
 window.cancelSubmissionInDrawer = async function (entryId) {
   if (confirm("정말 이 작품의 접수를 취소하고 삭제하시겠습니까? 한 번 지워진 접수 데이터는 복구할 수 없습니다.")) {
     if (GOOGLE_SHEET_API_URL) {
+      // [사은품 보존] 삭제 전에 기존 제출물의 prizeStatus를 임시 저장
+      if (activeContest) {
+        try {
+          const lookupRes = await fetch(GOOGLE_SHEET_API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: JSON.stringify({ action: "getSubmissions", studentUsername: currentUser.userKey })
+          });
+          const lookupResult = await lookupRes.json();
+          if (lookupResult.status === "success") {
+            const oldEntry = lookupResult.data.find(s => s.id === entryId);
+            if (oldEntry && oldEntry.data && oldEntry.data.prizeStatus === "delivered") {
+              const preserveKey = `${currentUser.userKey}_${activeContest.id}`;
+              _preservedPrizeStatus.set(preserveKey, "delivered");
+              console.log(`[사은품 보존] ${preserveKey} → prizeStatus 임시 저장됨`);
+            }
+          }
+        } catch (lookupErr) {
+          console.warn("사은품 상태 조회 실패 (무시):", lookupErr);
+        }
+      }
+
       showToast("클라우드에서 접수를 파기하고 있습니다...", "info");
       const payload = {
         action: "deleteSubmission",
@@ -4833,6 +4858,14 @@ async function executeSubmit() {
     data: {}
   };
 
+  // [사은품 보존] 이전 제출에서 임시 저장해둔 prizeStatus가 있으면 복원
+  const preserveKey = `${currentUser.userKey}_${activeContest.id}`;
+  if (_preservedPrizeStatus.has(preserveKey)) {
+    newEntry.data.prizeStatus = _preservedPrizeStatus.get(preserveKey);
+    _preservedPrizeStatus.delete(preserveKey);
+    console.log(`[사은품 복원] ${preserveKey} → prizeStatus 복원 완료`);
+  }
+
   if (activeContest.submissionType === "image" && activeContest.id === "pixelart") {
     const isDrawActive = document.getElementById("toggle-pixel-draw")?.classList.contains("active");
     if (isDrawActive) {
@@ -6562,7 +6595,6 @@ function renderZepQuizClassGrid() {
     const isPrizeDelivered = cls.prizeStatus === "delivered";
     const pct = cls.totalStudents > 0 ? Math.round((cls.completedCount / cls.totalStudents) * 100) : 0;
     
-    const cookieBtnClass = isEligible ? "zep-cookie-btn active" : "zep-cookie-btn disabled";
     const cookieText = isPrizeDelivered ? "🍪 지급완료" : "🍪 지급하기";
     
     const cardBorderColor = isPrizeDelivered 
@@ -6574,8 +6606,8 @@ function renderZepQuizClassGrid() {
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
           <h3 style="margin: 0; font-size: 0.95rem; font-weight: 800; color: white;">${cls.grade}학년 ${cls.classNum}반</h3>
           <span style="font-size: 0.72rem; color: #a0a0aa; font-weight: 700; cursor: pointer; background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;" 
-                onclick="event.stopPropagation(); editClassStudentCount('${cls.grade}', '${cls.classNum}', ${cls.totalStudents})" 
-                title="학급 정원 수정">
+            onclick="event.stopPropagation(); editClassStudentCount('${cls.grade}', '${cls.classNum}', ${cls.totalStudents})" 
+            title="학급 정원 수정">
             ${cls.completedCount}/${cls.totalStudents}명 (${pct}%) ✏️
           </span>
         </div>
@@ -6585,9 +6617,8 @@ function renderZepQuizClassGrid() {
         </div>
         
         <div style="display: flex; justify-content: flex-end;">
-          <button class="${cookieBtnClass} ${isPrizeDelivered ? 'delivered' : ''}" 
-                  onclick="event.stopPropagation(); toggleZepClassCookie('${cls.grade}', '${cls.classNum}')" 
-                  ${!isEligible ? 'disabled' : ''}>
+          <button class="zep-cookie-btn active ${isPrizeDelivered ? 'delivered' : ''}" 
+                  onclick="event.stopPropagation(); toggleZepClassCookie('${cls.grade}', '${cls.classNum}')">
             ${cookieText}
           </button>
         </div>
@@ -6821,12 +6852,6 @@ window.toggleZepClassCookie = async function(grade, classNum) {
   if (!zepQuizClassesData || !zepQuizClassesData[classKey]) return;
   
   const cls = zepQuizClassesData[classKey];
-  const isEligible = cls.totalStudents > 0 && (cls.completedCount >= Math.ceil(cls.totalStudents * 0.8));
-  if (!isEligible) {
-    showToast("학급 인원 80% 이상 참여 시에만 과자 지급 처리가 가능합니다.", "warning");
-    return;
-  }
-  
   const currentStatus = cls.prizeStatus;
   const nextStatus = currentStatus === "delivered" ? "waiting" : "delivered";
   
@@ -6839,7 +6864,7 @@ window.toggleZepClassCookie = async function(grade, classNum) {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: JSON.stringify({
           action: "updateClassPrizeStatus",
-          roundId: "zepquiz",
+          roundId: adminSelectedZepRound,
           classKey: classKey,
           prizeStatus: nextStatus
         })
@@ -7044,6 +7069,24 @@ function doPost(e) {
       }
       
       var entry = requestData.entry;
+      
+      // [사은품 보존 - 백엔드 이중 안전장치]
+      // 동일 학생+대회의 기존 제출에 prizeStatus가 있으면 새 제출에 이월
+      if (!entry.data.prizeStatus) {
+        var existingData = sheet.getDataRange().getValues();
+        var sIdx = getStartIndex(existingData, "ID");
+        for (var i = sIdx; i < existingData.length; i++) {
+          if (existingData[i][3] === entry.studentUsername && existingData[i][1] === entry.contestId) {
+            try {
+              var oldData = JSON.parse(existingData[i][9]);
+              if (oldData.prizeStatus === "delivered") {
+                entry.data.prizeStatus = "delivered";
+              }
+            } catch(pe) {}
+            break;
+          }
+        }
+      }
       
       // [핵심] 만약 이미지(Base64) 데이터가 존재한다면, 구글 드라이브에 파일을 생성하고 시트에는 URL 링크만 기입
       if (entry.data && entry.data.image && entry.data.image.indexOf("data:image/") === 0) {
