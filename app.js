@@ -9,8 +9,8 @@ const GOOGLE_SHEET_API_URL = atob(SECURE_API_ENCODED);
 let contestLocks = {};
 
 // ZepQuiz multi-round management state variables
-let currentActiveZepRound = "2"; // Currently active round for student submissions
-let adminSelectedZepRound = "zepquiz_1"; // Selected round in admin dashboard view
+let currentActiveZepRound = "3"; // Currently active round for student submissions
+let adminSelectedZepRound = "zepquiz_3"; // Selected round in admin dashboard view
 
 async function fetchContestLocks() {
   if (!GOOGLE_SHEET_API_URL) return;
@@ -24,9 +24,9 @@ async function fetchContestLocks() {
     if (result.status === "success") {
       contestLocks = result.data || {};
       if (result.activeRound) {
-        // 서버에서 예전 1회차가 돌아오더라도 현재 진행 중인 2회차 이상이 유지되도록 보정
+        // 서버에 저장된 활성 회차를 학생 화면과 동기화합니다.
         const parsedRound = parseInt(result.activeRound, 10);
-        currentActiveZepRound = (isNaN(parsedRound) || parsedRound < 2 ? 2 : parsedRound).toString();
+        currentActiveZepRound = (isNaN(parsedRound) || parsedRound < 2 ? 3 : parsedRound).toString();
         
         // Sync adminSelectedZepRound initial state with current active round
         adminSelectedZepRound = `zepquiz_${currentActiveZepRound}`;
@@ -148,18 +148,17 @@ const CONTESTS_DATA = [
   {
     id: "zepquiz_3",
     title: "Zep quiz(3회차)",
-    month: 9,
-    monthText: "9월",
-    period: "추후 안내 예정",
-    summary: "zepquiz에 접속하여 저작권 문제를 풀고, 완료 후 아래에서 참여 확인 버튼을 눌러주세요!",
-    description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 완료 후 아래의 <strong>'참여 완료' 버튼</strong>을 눌러 참가를 확인해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
+    month: 8,
+    monthText: "8월",
+    period: "2026. 8. 7.(금) ~ 2026. 8. 15.(토)",
+    summary: "zepquiz에 접속하여 8월 15일 광복절 문제를 풀고, 완료 후 아래에서 참여 완료 버튼을 눌러주세요!",
+    description: "8월 15일 광복절을 주제로 한 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈를 다 푼 후 아래의 <strong>'참여 완료' 버튼</strong>을 클릭해 참여를 확인해 주세요.",
     rules: [
       "참가 대상: 본교 3~6학년 학생 누구나",
-      "퀴즈 내용: 저작권",
-      "제한 사항: <strong style=\"color: #e63946;\">학교 구글 아이디로 로그인하여 문제 풀 것</strong>",
-      "참여 방법: 퀴즈를 다 풀면 아래 '참여 완료' 버튼을 클릭",
-      "특별 혜택: 학급 모든 친구가 제출할 경우 과자 지급",
-      "젭퀴즈 링크: <span class=\"contest-link-disabled\" style=\"color: #808088; font-style: italic;\">젭퀴즈 3회차 링크는 아직 등록되지 않았습니다 (준비 중).</span>"
+      "퀴즈 내용: 8월 15일, 광복절",
+      "참여 방법: 퀴즈를 다 풀고 나서 아래 '참여 완료' 버튼 클릭",
+      "특별 혜택: 학급 친구의 80% 이상 참여 시 과자 지급",
+      "젭퀴즈 링크: <a href=\"https://quiz.zep.us/play/qnKogr\" target=\"_blank\" class=\"contest-link\">zepquiz 바로가기 (https://quiz.zep.us/play/qnKogr)</a>"
     ],
     evaluationCriteria: [
       { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "60%" },
@@ -636,8 +635,8 @@ const GALLERY_2025_DATA = RAW_2025_KEYRING_DATA.trim().split("\n").map(line => {
 // ====================================================
 // STATE MANAGEMENT & USER SESSION CONFIGURATION
 // ====================================================
-let currentVirtualMonth = 6;
-const FORCE_ACTIVE_CONTESTS = ["cuttoon"];
+let currentVirtualMonth = 8;
+const FORCE_ACTIVE_CONTESTS = [];
 
 function checkIsAdmin() {
   return currentUser && 
@@ -653,10 +652,6 @@ function getContestStatus(contestOrMonth) {
   }
 
   const contestId = typeof contestOrMonth === "object" ? contestOrMonth.id : (typeof contestOrMonth === "string" ? contestOrMonth : null);
-  if (contestId === "cuttoon" || contestOrMonth === "cuttoon") {
-    return "active";
-  }
-  
   if (contestId && contestId.startsWith("zepquiz_")) {
     const roundNum = parseInt(contestId.substring(8), 10);
     const activeRoundNum = parseInt(currentActiveZepRound, 10);
@@ -936,11 +931,11 @@ function updateThemeIcon(theme) {
 }
 
 // ====================================================
-// PRODUCTION TIME CONFIGURATION (JUNE ONLY)
+// PRODUCTION TIME CONFIGURATION (AUGUST ONLY)
 // ====================================================
 function initVirtualTime() {
-  // 실제 프로덕션 환경의 진행 월을 6월로 고정합니다.
-  currentVirtualMonth = 6;
+  // 실제 프로덕션 환경의 진행 월을 8월로 고정합니다.
+  currentVirtualMonth = 8;
   sessionStorage.removeItem("soro_virtual_month"); // 가상 오버라이드 제거
 
   const statMonthEl = document.getElementById("stat-current-month");
@@ -7514,7 +7509,7 @@ function doPost(e) {
     else if (requestData.action === "getContestLocks") {
       var sheet = ss.getSheetByName("Settings");
       var locks = {};
-      var activeRound = "1"; // 기본 활성 회차는 1회차
+      var activeRound = "3"; // 기본 활성 회차는 3회차
       if (sheet) {
         var data = sheet.getDataRange().getValues();
         var startIndex = getStartIndex(data, "Key");
