@@ -639,11 +639,16 @@ let currentVirtualMonth = 8;
 const FORCE_ACTIVE_CONTESTS = [];
 
 function checkIsAdmin() {
-  return currentUser && 
-         parseInt(currentUser.grade, 10) === 5 && 
-         parseInt(currentUser.classNum, 10) === 1 && 
-         parseInt(currentUser.number, 10) === 27 && 
+  return currentUser &&
+         parseInt(currentUser.grade, 10) === 5 &&
+         parseInt(currentUser.classNum, 10) === 1 &&
+         parseInt(currentUser.number, 10) === 27 &&
          currentUser.name === "김태호";
+}
+
+// 로그인 시 서버가 발급한 관리자 세션 토큰. 관리자 전용 백엔드 액션 호출 시 함께 보내야 서버에서 통과됩니다.
+function getAdminToken() {
+  return currentUser && currentUser.adminToken;
 }
 
 function getContestStatus(contestOrMonth) {
@@ -1060,6 +1065,9 @@ async function handleSignUp(grade, classNum, number, name, password) {
       }
 
       const loggedUser = { userKey, grade, classNum, number, name };
+      if (result.adminToken) {
+        loggedUser.adminToken = result.adminToken;
+      }
       currentUser = loggedUser;
       localStorage.setItem("soro_current_user", JSON.stringify(loggedUser));
       updateUIForLoggedInState();
@@ -1106,6 +1114,9 @@ async function handleResetPassword(grade, classNum, number, name, newPassword) {
       }
 
       const loggedUser = { userKey, grade, classNum, number, name };
+      if (result.adminToken) {
+        loggedUser.adminToken = result.adminToken;
+      }
       currentUser = loggedUser;
       localStorage.setItem("soro_current_user", JSON.stringify(loggedUser));
 
@@ -1187,6 +1198,9 @@ async function handleLogin(grade, classNum, number, name, password) {
       }
 
       const loggedUser = { userKey, grade, classNum, number, name };
+      if (result.adminToken) {
+        loggedUser.adminToken = result.adminToken;
+      }
       currentUser = loggedUser;
       localStorage.setItem("soro_current_user", JSON.stringify(loggedUser));
       
@@ -2585,7 +2599,8 @@ window.cancelSubmissionInDrawer = async function (entryId) {
       showToast("클라우드에서 접수를 파기하고 있습니다...", "info");
       const payload = {
         action: "deleteSubmission",
-        id: entryId
+        id: entryId,
+        studentUsername: currentUser.userKey
       };
       try {
         const response = await fetch(GOOGLE_SHEET_API_URL, {
@@ -4507,7 +4522,8 @@ function initPixelArtEditor() {
         // delete previous draft first
         const delPayload = {
           action: "deleteSubmission",
-          id: draftId
+          id: draftId,
+          studentUsername: currentUser.userKey
         };
 
         try {
@@ -5420,7 +5436,8 @@ window.confirmDeleteEntry = async function (entryId) {
       showToast("클라우드에서 접수를 파기하고 있습니다...", "info");
       const payload = {
         action: "deleteSubmission",
-        id: entryId
+        id: entryId,
+        studentUsername: currentUser.userKey
       };
       try {
         const response = await fetch(GOOGLE_SHEET_API_URL, {
@@ -5915,7 +5932,7 @@ async function fetchAndRenderAdminData() {
       const response = await fetch(GOOGLE_SHEET_API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify({ action: "getAllSubmissions", contestId: "all" })
+        body: JSON.stringify({ action: "getAllSubmissions", contestId: "all", adminToken: getAdminToken() })
       });
       const result = await response.json();
       if (result.status === "success" && Array.isArray(result.data)) {
@@ -5936,7 +5953,7 @@ async function fetchAndRenderAdminData() {
           const response = await fetch(GOOGLE_SHEET_API_URL, {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: JSON.stringify({ action: "getAllSubmissions", contestId: cId })
+            body: JSON.stringify({ action: "getAllSubmissions", contestId: cId, adminToken: getAdminToken() })
           });
           const result = await response.json();
           if (result.status === "success" && Array.isArray(result.data)) {
@@ -6210,7 +6227,8 @@ window.toggleAdminStar = async function(submissionId) {
         body: JSON.stringify({
           action: "updateSubmissionStarStatus",
           id: submissionId,
-          isStarred: nextStarred
+          isStarred: nextStarred,
+          adminToken: getAdminToken()
         })
       });
       const result = await response.json();
@@ -6253,7 +6271,8 @@ window.toggleAdminPrize = async function(submissionId) {
     const payload = {
       action: "updateSubmissionPrizeStatus",
       id: submissionId,
-      prizeStatus: currentStatus
+      prizeStatus: currentStatus,
+      adminToken: getAdminToken()
     };
     try {
       const response = await fetch(GOOGLE_SHEET_API_URL, {
@@ -6430,7 +6449,7 @@ window.deleteSubmissionByAdmin = async function(id, contestId) {
       const response = await fetch(GOOGLE_SHEET_API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify({ action: "deleteSubmission", id: id })
+        body: JSON.stringify({ action: "deleteSubmission", id: id, adminToken: getAdminToken() })
       });
       const result = await response.json();
 
@@ -6581,7 +6600,8 @@ window.setAsActiveZepRound = async function() {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: JSON.stringify({
           action: "updateActiveZepRound",
-          activeRound: roundNum
+          activeRound: roundNum,
+          adminToken: getAdminToken()
         })
       });
       const result = await response.json();
@@ -6637,7 +6657,7 @@ async function fetchZepQuizDataAndRender() {
     const response = await fetch(GOOGLE_SHEET_API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: JSON.stringify({ action: "getZepQuizStats", roundId: adminSelectedZepRound })
+      body: JSON.stringify({ action: "getZepQuizStats", roundId: adminSelectedZepRound, adminToken: getAdminToken() })
     });
     
     const result = await response.json();
@@ -6934,7 +6954,7 @@ window.deleteZepSubmissionByAdmin = async function(submissionId, studentName, gr
       const response = await fetch(GOOGLE_SHEET_API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify({ action: "deleteSubmission", id: submissionId })
+        body: JSON.stringify({ action: "deleteSubmission", id: submissionId, adminToken: getAdminToken() })
       });
       const result = await response.json();
 
@@ -6970,7 +6990,7 @@ window.deleteZepUserByAdmin = async function(userKey, studentName, grade, classN
       const response = await fetch(GOOGLE_SHEET_API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify({ action: "deleteUser", userKey: userKey })
+        body: JSON.stringify({ action: "deleteUser", userKey: userKey, adminToken: getAdminToken() })
       });
       const result = await response.json();
       
@@ -7031,7 +7051,8 @@ window.toggleZepClassCookie = async function(grade, classNum) {
           action: "updateClassPrizeStatus",
           roundId: adminSelectedZepRound,
           classKey: classKey,
-          prizeStatus: nextStatus
+          prizeStatus: nextStatus,
+          adminToken: getAdminToken()
         })
       });
       
@@ -7081,7 +7102,8 @@ window.editClassStudentCount = async function(grade, classNum, currentCount) {
         body: JSON.stringify({
           action: "updateClassStudentCount",
           classKey: `${grade}-${classNum}`,
-          studentCount: newCount
+          studentCount: newCount,
+          adminToken: getAdminToken()
         })
       });
       const result = await response.json();
@@ -7137,6 +7159,21 @@ function spawnCookieParticles() {
 ※ 이 스크립트는 학생들이 업로드한 대용량 그림 파일(Base64)을 자동으로 본인 구글 드라이브의 "SORO_Submissions" 폴더에 저장하고, 시트에는 해당 이미지의 다운로드/뷰어 링크만 깔끔하게 저장하여 구글 시트의 셀 용량 제한(5만자) 에러를 방지하고 편리하게 관리할 수 있게 해줍니다.
 
 ====================== 복사할 Apps Script 코드 시작 ======================
+
+// [관리자 인증] 하드코딩된 관리자 계정 식별자와 로그인 시 발급되는 세션 토큰 검증 헬퍼
+var ADMIN_USER_KEY = "5_1_27_김태호";
+
+function isValidAdminToken(token) {
+  if (!token) return false;
+  try {
+    var raw = PropertiesService.getScriptProperties().getProperty("ADMIN_TOKEN_DATA");
+    if (!raw) return false;
+    var stored = JSON.parse(raw);
+    return stored.token === token && Date.now() < stored.expires;
+  } catch (e) {
+    return false;
+  }
+}
 
 function doPost(e) {
   var response = { status: "error", message: "알 수 없는 요청" };
@@ -7196,6 +7233,15 @@ function doPost(e) {
       
       if (authenticated) {
         response = { status: "success", message: "인증 성공" };
+        // 관리자 계정으로 로그인한 경우에만 관리자 전용 액션에 쓸 세션 토큰을 발급합니다.
+        if (requestData.userKey === ADMIN_USER_KEY) {
+          var newAdminToken = Utilities.getUuid();
+          PropertiesService.getScriptProperties().setProperty(
+            "ADMIN_TOKEN_DATA",
+            JSON.stringify({ token: newAdminToken, expires: Date.now() + 12 * 60 * 60 * 1000 })
+          );
+          response.adminToken = newAdminToken;
+        }
       } else {
         response = { status: "error", message: "학년/반/번호/이름 또는 비밀번호가 틀렸습니다." };
       }
@@ -7203,9 +7249,14 @@ function doPost(e) {
 
     // 2.5. 비밀번호 초기화 액션 (Users 시트 수정)
     else if (requestData.action === "resetPassword") {
+      // [보안] 관리자 계정의 비밀번호는 이미 인증된 관리자만 재설정할 수 있습니다.
+      // (이게 없으면 userKey만 알아도 관리자 비밀번호를 바꿔 로그인해 토큰을 발급받을 수 있습니다.)
+      if (requestData.userKey === ADMIN_USER_KEY && !isValidAdminToken(requestData.adminToken)) {
+        response = { status: "error", message: "관리자 계정 비밀번호는 관리자 인증 후에만 재설정할 수 있습니다." };
+      } else {
       var sheet = ss.getSheetByName("Users");
       var updated = false;
-      
+
       if (sheet) {
         var data = sheet.getDataRange().getValues();
         var startIndex = getStartIndex(data, "UserKey");
@@ -7217,11 +7268,12 @@ function doPost(e) {
           }
         }
       }
-      
+
       if (updated) {
         response = { status: "success", message: "비밀번호 초기화 완료" };
       } else {
         response = { status: "error", message: "일치하는 학생 정보(계정)가 존재하지 않습니다." };
+      }
       }
     }
     
@@ -7330,8 +7382,14 @@ function doPost(e) {
           }
         }
         
+        // [보안] 본인 소유 제출물이거나 관리자만 삭제할 수 있습니다.
+        var isOwner = !!targetUsername && targetUsername === requestData.studentUsername;
+        var isAdminCaller = isValidAdminToken(requestData.adminToken);
+
         // 2단계: 일치하는 모든 행을 지우고, 해당 행들에 속한 구글 드라이브 파일도 함께 삭제(휴지통 이동)합니다.
-        if (targetUsername && targetContestId) {
+        if (!isOwner && !isAdminCaller) {
+          // 소유자 본인 또는 관리자가 아니면 삭제를 진행하지 않습니다.
+        } else if (targetUsername && targetContestId) {
           for (var i = data.length - 1; i >= startIndex; i--) {
             if (data[i][3] === targetUsername && data[i][1] === targetContestId) {
               // 파일 ID 추출 및 삭제
@@ -7390,6 +7448,9 @@ function doPost(e) {
     
     // 5.5. 회원 계정 영구 삭제 액션 (Users 시트 + Submissions 시트 연쇄 삭제 및 드라이브 파일 정리)
     else if (requestData.action === "deleteUser") {
+      if (!isValidAdminToken(requestData.adminToken)) {
+        response = { status: "error", message: "관리자 권한이 필요합니다." };
+      } else {
       var usersSheet = ss.getSheetByName("Users");
       var subsSheet = ss.getSheetByName("Submissions");
       var userKey = requestData.userKey;
@@ -7440,10 +7501,16 @@ function doPost(e) {
       } else {
         response = { status: "error", message: "삭제할 회원 계정을 찾을 수 없음" };
       }
+      }
     }
-    
+
     // 6. 전체 작품 조회 액션 (Submissions 시트 - 갤러리 로딩용)
     else if (requestData.action === "getAllSubmissions") {
+      // [보안] contestId가 "all"인 전체 대회 일괄 조회(관리자 대시보드 전용)만 토큰을 요구합니다.
+      // 특정 contestId 지정 조회는 공개 갤러리(키링/도서관 등)에서 로그인 없이도 쓰이므로 그대로 둡니다.
+      if (requestData.contestId === "all" && !isValidAdminToken(requestData.adminToken)) {
+        response = { status: "error", message: "관리자 권한이 필요합니다." };
+      } else {
       var sheet = ss.getSheetByName("Submissions");
       var results = [];
       var filterContestId = requestData.contestId;
@@ -7472,10 +7539,14 @@ function doPost(e) {
         }
       }
       response = { status: "success", data: results };
+      }
     }
-    
+
     // 7. 사은품 지급 상태 실시간 업데이트 액션 (Submissions 시트)
     else if (requestData.action === "updateSubmissionPrizeStatus") {
+      if (!isValidAdminToken(requestData.adminToken)) {
+        response = { status: "error", message: "관리자 권한이 필요합니다." };
+      } else {
       var sheet = ss.getSheetByName("Submissions");
       var updated = false;
       
@@ -7503,6 +7574,7 @@ function doPost(e) {
       } else {
         response = { status: "error", message: "업데이트 대상을 찾을 수 없음" };
       }
+      }
     }
 
     // 8. 공모전 잠금 상태 조회 액션 (Settings 시트)
@@ -7528,6 +7600,9 @@ function doPost(e) {
 
     // 8-1. 젭퀴즈 활성 회차 업데이트 액션 (Settings 시트)
     else if (requestData.action === "updateActiveZepRound") {
+      if (!isValidAdminToken(requestData.adminToken)) {
+        response = { status: "error", message: "관리자 권한이 필요합니다." };
+      } else {
       var sheet = ss.getSheetByName("Settings");
       if (!sheet) {
         sheet = ss.insertSheet("Settings");
@@ -7550,10 +7625,14 @@ function doPost(e) {
         sheet.appendRow(["zepquiz_active_round", activeRound]);
       }
       response = { status: "success", message: "활성 회차 설정 완료" };
+      }
     }
 
     // 9. 공모전 잠금 상태 업데이트 액션 (Settings 시트)
     else if (requestData.action === "updateContestLock") {
+      if (!isValidAdminToken(requestData.adminToken)) {
+        response = { status: "error", message: "관리자 권한이 필요합니다." };
+      } else {
       var sheet = ss.getSheetByName("Settings");
       if (!sheet) {
         sheet = ss.insertSheet("Settings");
@@ -7575,10 +7654,14 @@ function doPost(e) {
         sheet.appendRow([key, String(requestData.isLocked)]);
       }
       response = { status: "success", message: "잠금 설정 완료" };
+      }
     }
 
     // 10. 별표 상태 업데이트 액션 (Submissions 시트)
     else if (requestData.action === "updateSubmissionStarStatus") {
+      if (!isValidAdminToken(requestData.adminToken)) {
+        response = { status: "error", message: "관리자 권한이 필요합니다." };
+      } else {
       var sheet = ss.getSheetByName("Submissions");
       var updated = false;
       if (sheet) {
@@ -7604,10 +7687,14 @@ function doPost(e) {
       } else {
         response = { status: "error", message: "업데이트 대상을 찾을 수 없음" };
       }
+      }
     }
 
     // 11. 젭퀴즈 통계 및 학급 현황 집계 액션 (Users + Submissions + Settings 시트)
     else if (requestData.action === "getZepQuizStats") {
+      if (!isValidAdminToken(requestData.adminToken)) {
+        response = { status: "error", message: "관리자 권한이 필요합니다." };
+      } else {
       var usersSheet = ss.getSheetByName("Users");
       var subsSheet = ss.getSheetByName("Submissions");
       var settingsSheet = ss.getSheetByName("Settings");
@@ -7729,10 +7816,14 @@ function doPost(e) {
       }
       
       response = { status: "success", classes: classes };
+      }
     }
 
     // 12. 학급 단체 과자 세트 지급 상태 업데이트 액션 (Settings 시트)
     else if (requestData.action === "updateClassPrizeStatus") {
+      if (!isValidAdminToken(requestData.adminToken)) {
+        response = { status: "error", message: "관리자 권한이 필요합니다." };
+      } else {
       var sheet = ss.getSheetByName("Settings");
       if (!sheet) {
         sheet = ss.insertSheet("Settings");
@@ -7761,10 +7852,14 @@ function doPost(e) {
       }
       
       response = { status: "success", message: "과자 지급 상태 업데이트 완료" };
+      }
     }
-    
+
     // 13. 학급 학생 수 수정 액션 (Settings 시트)
     else if (requestData.action === "updateClassStudentCount") {
+      if (!isValidAdminToken(requestData.adminToken)) {
+        response = { status: "error", message: "관리자 권한이 필요합니다." };
+      } else {
       var sheet = ss.getSheetByName("Settings");
       if (!sheet) {
         sheet = ss.insertSheet("Settings");
@@ -7792,8 +7887,9 @@ function doPost(e) {
       }
       
       response = { status: "success", message: "학생 수 설정 완료" };
+      }
     }
-    
+
   } catch (error) {
     response = { status: "error", message: error.toString() };
   }
