@@ -639,11 +639,14 @@ let currentVirtualMonth = 8;
 const FORCE_ACTIVE_CONTESTS = [];
 
 function checkIsAdmin() {
-  return currentUser &&
+  // [보안] 프로필 값(학년/반/번호/이름) 비교만으로는 devtools에서 localStorage를 조작해 통과할 수 있으므로,
+  // 로그인 시 서버가 실제로 발급해준 adminToken이 있을 때만 관리자로 인정합니다.
+  return !!(currentUser &&
          parseInt(currentUser.grade, 10) === 5 &&
          parseInt(currentUser.classNum, 10) === 1 &&
          parseInt(currentUser.number, 10) === 27 &&
-         currentUser.name === "김태호";
+         currentUser.name === "김태호" &&
+         currentUser.adminToken);
 }
 
 // 로그인 시 서버가 발급한 관리자 세션 토큰. 관리자 전용 백엔드 액션 호출 시 함께 보내야 서버에서 통과됩니다.
