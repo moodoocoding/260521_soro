@@ -3001,6 +3001,10 @@ function setupDynamicFormFields(contest) {
           <option value="'Nanum Pen Script', cursive">✒️ 나눔펜체 (귀엽고 깔끔한 필체)</option>
           <option value="'Gamja Flower', cursive">✒️ 감자꽃체 (동화적이고 따뜻한 서체)</option>
           <option value="'Yeon Sung', cursive">✒️ 연성체 (고전적인 멋을 내는 서체)</option>
+          <option value="'Song Myung', serif">✒️ 송명체 (붓글씨 캘리그라피 느낌의 명조체)</option>
+          <option value="'Poor Story', cursive">✒️ 푸어스토리체 (자연스러운 손글씨)</option>
+          <option value="'Gaegu', cursive">✒️ 개구체 (귀엽고 둥근둥근한 손글씨)</option>
+          <option value="'Kirang Haerang', cursive">✒️ 키랑해랑체 (장난스러운 붓글씨 느낌)</option>
         </select>
       </div>
 
