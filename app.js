@@ -6634,19 +6634,25 @@ window.setAsActiveZepRound = async function() {
 };
 
 // 젭퀴즈 데이터 로드 및 렌더러
+// 회차를 빠르게 전환하면 이전 요청이 늦게 응답으로 돌아와 최신 화면을 덮어쓸 수 있어,
+// 요청마다 토큰을 발급해 "가장 최근에 시작한 요청"의 응답만 반영합니다.
+let zepQuizFetchRequestToken = 0;
+
 async function fetchZepQuizDataAndRender() {
   const classGrid = document.getElementById("admin-zep-class-grid");
   if (!classGrid) return;
-  
+
+  const requestToken = ++zepQuizFetchRequestToken;
+
   classGrid.innerHTML = `
     <div style="grid-column: 1 / -1; text-align: center; padding: 50px; color: var(--text-secondary);">
       <div class="spinner" style="margin: 0 auto 12px auto;"></div>
       <p style="font-weight: 800; color: var(--text-primary);">원격 젭퀴즈 달성 데이터를 수집하는 중...</p>
     </div>
   `;
-  
+
   closeZepDrilldown();
-  
+
   if (!GOOGLE_SHEET_API_URL) {
     classGrid.innerHTML = `
       <div style="grid-column: 1 / -1; text-align: center; padding: 30px; color: var(--error-color); font-weight: 800;">
@@ -6655,15 +6661,19 @@ async function fetchZepQuizDataAndRender() {
     `;
     return;
   }
-  
+
   try {
     const response = await fetch(GOOGLE_SHEET_API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: JSON.stringify({ action: "getZepQuizStats", roundId: adminSelectedZepRound, adminToken: getAdminToken() })
     });
-    
+
     const result = await response.json();
+
+    // 이 요청이 시작된 이후 더 최신 회차 조회가 시작됐다면, 이 응답은 이미 낡은 것이므로 무시합니다.
+    if (requestToken !== zepQuizFetchRequestToken) return;
+
     if (result.status === "success" && result.classes) {
       zepQuizClassesData = result.classes;
       renderZepQuizKPIs();
@@ -6678,6 +6688,7 @@ async function fetchZepQuizDataAndRender() {
       `;
     }
   } catch (err) {
+    if (requestToken !== zepQuizFetchRequestToken) return;
     console.error("fetchZepQuizDataAndRender error:", err);
     showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
     classGrid.innerHTML = `
