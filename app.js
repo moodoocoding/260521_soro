@@ -3001,12 +3001,11 @@ function setupDynamicFormFields(contest) {
           <option value="'Nanum Pen Script', cursive">✒️ 나눔펜체 (귀엽고 깔끔한 필체)</option>
           <option value="'Gamja Flower', cursive">✒️ 감자꽃체 (동화적이고 따뜻한 서체)</option>
           <option value="'Yeon Sung', cursive">✒️ 연성체 (고전적인 멋을 내는 서체)</option>
-          <option value="'CustomFont1', sans-serif">⭐ 사용자 에셋 서체 1 (asset/fonts/custom1.ttf / .otf)</option>
-          <option value="'CustomFont2', sans-serif">⭐ 사용자 에셋 서체 2 (asset/fonts/custom2.ttf / .otf)</option>
+          <option value="'Song Myung', serif">✒️ 송명체 (붓글씨 캘리그라피 느낌의 명조체)</option>
+          <option value="'Poor Story', cursive">✒️ 푸어스토리체 (자연스러운 손글씨)</option>
+          <option value="'Gaegu', cursive">✒️ 개구체 (귀엽고 둥근둥근한 손글씨)</option>
+          <option value="'Kirang Haerang', cursive">✒️ 키랑해랑체 (장난스러운 붓글씨 느낌)</option>
         </select>
-        <p style="margin-top:6px; font-size:0.75rem; color:var(--text-secondary); line-height:1.4;">
-          ※ 개인 폰트는 프로젝트 폴더 내 <code>asset/fonts/custom1.ttf</code> (또는 <code>custom1.otf</code>) 경로로 파일을 업로드해두면 자동 적용됩니다.
-        </p>
       </div>
 
       <button type="button" id="btn-generate-calli" class="btn btn-secondary btn-block" style="background: var(--accent-gradient, linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)); color: white; font-weight: bold; padding: 12px; margin-bottom: 16px; border:none; transition:transform 0.2s;">🎨 AI 캘리그라피 엽서 생성</button>
@@ -3343,48 +3342,29 @@ async function generateAICalligraphyCard() {
   img.onload = async () => {
     try {
       // ──────────────────────────────────────────────────────
-      // [Canvas 텍스트 폭 비교 방식] 폰트 실제 로딩 완료 검증
-      // display=swap 환경에서 document.fonts.check()가 폰트 미로드
-      // 상태에서도 true를 반환하는 문제를 근본적으로 해결합니다.
-      // Canvas measureText 폭이 시스템 폰트와 달라지는 순간을
-      // 감지하여 웹폰트가 메모리에 올라갔음을 물리적으로 확인합니다.
+      // 웹폰트 로딩 완료 검증: 브라우저의 FontFaceSet API(document.fonts)로
+      // 폰트가 실제로 "전부" 로드될 때까지 기다립니다.
+      //
+      // 예전에는 캔버스에 시험 삼아 글자를 그려 폭이 시스템 기본 폰트와
+      // 달라지는 순간을 "로드 완료"로 판단했는데, 브라우저가 폰트의 가로
+      // 폭 정보만 먼저 확정하고 실제 글자 모양(글리프)은 뒤이어 준비하는
+      // 경우가 있어서, 그 타이밍에 그리면 일부 글자만 다른 폰트로 찍히는
+      // 문제가 있었습니다. document.fonts.ready는 브라우저가 직접 보장하는
+      // "그릴 준비가 끝났다"는 신호라 더 안전합니다.
       // ──────────────────────────────────────────────────────
       try {
         const primaryFontFamily = selectedFont.split(',')[0].replace(/['"]/g, "").trim();
         console.log(`Loading webfont: "${primaryFontFamily}" (raw value: ${selectedFont})...`);
 
-        // 1단계: 브라우저에게 폰트 다운로드를 요청 (non-blocking)
-        document.fonts.load(`44px "${primaryFontFamily}"`).catch(() => {});
+        await Promise.race([
+          (async () => {
+            await document.fonts.load(`44px "${primaryFontFamily}"`);
+            await document.fonts.ready;
+          })(),
+          new Promise(resolve => setTimeout(resolve, 5000)) // 5초 넘게 걸리면 포기하고 진행
+        ]);
 
-        // 2단계: 숨겨진 Canvas에서 텍스트 폭 비교로 실제 로딩 완료를 검증
-        const testCanvas = document.createElement("canvas");
-        const testCtx = testCanvas.getContext("2d");
-        const testStr = "가나다라마바사아자차카타파하 ABCDwWmM";
-
-        // 시스템 기본 폰트(monospace)의 텍스트 폭을 기준선으로 측정
-        testCtx.font = '44px monospace';
-        const fallbackWidth = testCtx.measureText(testStr).width;
-
-        let fontLoaded = false;
-        for (let i = 0; i < 50; i++) { // 최대 5초 대기 (100ms × 50회)
-          testCtx.font = `44px "${primaryFontFamily}", monospace`;
-          const currentWidth = testCtx.measureText(testStr).width;
-
-          if (currentWidth !== fallbackWidth) {
-            fontLoaded = true;
-            console.log(`✅ Webfont "${primaryFontFamily}" 로드 확인 완료! (${i * 100}ms 소요, 폭 차이: ${Math.abs(currentWidth - fallbackWidth).toFixed(1)}px)`);
-            break;
-          }
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-
-        if (!fontLoaded) {
-          console.warn(`⚠️ Webfont "${primaryFontFamily}" 5초 내 로드 실패, 시스템 대체 폰트로 렌더링합니다.`);
-        }
-
-        // 3단계: 폰트 엔진 안정화를 위한 마이크로 딜레이
-        await new Promise(resolve => setTimeout(resolve, 50));
-        console.log(`Webfont "${primaryFontFamily}" is ready to render!`);
+        console.log(`✅ Webfont "${primaryFontFamily}" 로드 확인 완료!`);
       } catch (fontErr) {
         console.warn("Font loading failed, falling back to system font:", fontErr);
       }
