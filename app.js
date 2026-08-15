@@ -7289,7 +7289,60 @@ function doPost(e) {
       }
       
       var entry = requestData.entry;
-      
+
+      // [보안] 1) 회차/공모전 접수 가능 여부 검증
+      var submitBlockedReason = "";
+      var isZepQuizEntry = entry.contestId && entry.contestId.indexOf("zepquiz_") === 0;
+      if (isZepQuizEntry) {
+        var settingsSheetForSubmit = ss.getSheetByName("Settings");
+        var activeRoundForSubmit = "3";
+        if (settingsSheetForSubmit) {
+          var settingsDataForSubmit = settingsSheetForSubmit.getDataRange().getValues();
+          var settingsStartForSubmit = getStartIndex(settingsDataForSubmit, "Key");
+          for (var si = settingsStartForSubmit; si < settingsDataForSubmit.length; si++) {
+            if (settingsDataForSubmit[si][0] === "zepquiz_active_round") {
+              activeRoundForSubmit = settingsDataForSubmit[si][1].toString();
+              break;
+            }
+          }
+        }
+        var submittedRoundNum = parseInt(entry.contestId.substring(8), 10);
+        if (submittedRoundNum !== parseInt(activeRoundForSubmit, 10) && !isValidAdminToken(requestData.adminToken)) {
+          submitBlockedReason = "현재 진행 중인 회차가 아닙니다.";
+        }
+      } else if (entry.contestId !== "pixelart_draft" && !isValidAdminToken(requestData.adminToken)) {
+        // 젭퀴즈가 아닌 공모전은 아직 접수를 여는 기능이 없으므로, 관리자 토큰 없이는 접수를 막습니다.
+        // (단, "pixelart_draft"는 픽셀아트 에디터의 임시저장 내부 기능이라 예외로 허용합니다.)
+        submitBlockedReason = "현재 접수 기간이 아닌 공모전입니다.";
+      }
+
+      // [보안] 2) 제출자 신원 검증 - Users 시트에 실제 가입된 학생 정보와 일치하는지 확인 (사칭 방지)
+      if (!submitBlockedReason) {
+        var usersSheetForVerify = ss.getSheetByName("Users");
+        var isVerifiedIdentity = false;
+        if (usersSheetForVerify) {
+          var uData = usersSheetForVerify.getDataRange().getValues();
+          var uStart = getStartIndex(uData, "UserKey");
+          for (var ui = uStart; ui < uData.length; ui++) {
+            if (uData[ui][0] === entry.studentUsername &&
+                parseInt(uData[ui][1], 10) === parseInt(entry.studentGrade, 10) &&
+                parseInt(uData[ui][2], 10) === parseInt(entry.studentClass, 10) &&
+                parseInt(uData[ui][3], 10) === parseInt(entry.studentNumber, 10) &&
+                uData[ui][4] === entry.studentName) {
+              isVerifiedIdentity = true;
+              break;
+            }
+          }
+        }
+        if (!isVerifiedIdentity) {
+          submitBlockedReason = "제출자 정보가 가입된 학생 정보와 일치하지 않습니다.";
+        }
+      }
+
+      if (submitBlockedReason) {
+        response = { status: "error", message: submitBlockedReason };
+      } else {
+
       // [사은품 보존 - 백엔드 이중 안전장치]
       // 동일 학생+대회의 기존 제출에 prizeStatus가 있으면 새 제출에 이월
       if (!entry.data.prizeStatus) {
@@ -7332,8 +7385,9 @@ function doPost(e) {
         JSON.stringify(entry.data)
       ]);
       response = { status: "success", message: "접수 성공" };
+      }
     }
-    
+
     // 4. 작품 내역 조회 액션 (Submissions 시트)
     else if (requestData.action === "getSubmissions") {
       var sheet = ss.getSheetByName("Submissions");
