@@ -2399,7 +2399,13 @@ function closeContestDrawer() {
 // ====================================================
 // ASYNCHRONOUS CHECK AND RENDER SUBMISSION PROCESS
 // ====================================================
+// 드로어를 빠르게 다른 공모전으로 전환하면 이전 조회가 늦게 응답으로 돌아와
+// 지금 열려있는 공모전의 제출 상태를 엉뚱한 데이터로 덮어쓸 수 있어, 요청마다
+// 토큰을 발급해 "가장 최근에 시작한 요청"의 응답만 화면에 반영합니다.
+let submissionAreaRequestToken = 0;
+
 async function checkAndRenderSubmissionArea(contest) {
+  const requestToken = ++submissionAreaRequestToken;
   const formContainer = document.getElementById("submission-form-container");
   const subForm = document.getElementById("submission-form");
   const authNotice = document.getElementById("auth-required-notice");
@@ -2454,6 +2460,8 @@ async function checkAndRenderSubmissionArea(contest) {
     }
   }
 
+  // 이 요청이 시작된 이후 드로어가 다른 공모전으로 전환됐다면, 이 응답은 이미 낡은 것이므로 화면에 반영하지 않습니다.
+  if (requestToken !== submissionAreaRequestToken) return;
 
 
   // 로더 제거
