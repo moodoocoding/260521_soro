@@ -3001,12 +3001,7 @@ function setupDynamicFormFields(contest) {
           <option value="'Nanum Pen Script', cursive">✒️ 나눔펜체 (귀엽고 깔끔한 필체)</option>
           <option value="'Gamja Flower', cursive">✒️ 감자꽃체 (동화적이고 따뜻한 서체)</option>
           <option value="'Yeon Sung', cursive">✒️ 연성체 (고전적인 멋을 내는 서체)</option>
-          <option value="'CustomFont1', sans-serif">⭐ 사용자 에셋 서체 1 (asset/fonts/custom1.ttf / .otf)</option>
-          <option value="'CustomFont2', sans-serif">⭐ 사용자 에셋 서체 2 (asset/fonts/custom2.ttf / .otf)</option>
         </select>
-        <p style="margin-top:6px; font-size:0.75rem; color:var(--text-secondary); line-height:1.4;">
-          ※ 개인 폰트는 프로젝트 폴더 내 <code>asset/fonts/custom1.ttf</code> (또는 <code>custom1.otf</code>) 경로로 파일을 업로드해두면 자동 적용됩니다.
-        </p>
       </div>
 
       <button type="button" id="btn-generate-calli" class="btn btn-secondary btn-block" style="background: var(--accent-gradient, linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)); color: white; font-weight: bold; padding: 12px; margin-bottom: 16px; border:none; transition:transform 0.2s;">🎨 AI 캘리그라피 엽서 생성</button>
