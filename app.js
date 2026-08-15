@@ -26,7 +26,7 @@ async function fetchContestLocks() {
       if (result.activeRound) {
         // 서버에 저장된 활성 회차를 학생 화면과 동기화합니다.
         const parsedRound = parseInt(result.activeRound, 10);
-        currentActiveZepRound = (isNaN(parsedRound) || parsedRound < 2 ? 3 : parsedRound).toString();
+        currentActiveZepRound = (isNaN(parsedRound) || parsedRound < 1 ? 3 : parsedRound).toString();
         
         // Sync adminSelectedZepRound initial state with current active round
         adminSelectedZepRound = `zepquiz_${currentActiveZepRound}`;
