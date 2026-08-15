@@ -3326,6 +3326,12 @@ async function generateAICalligraphyCard() {
   const title = titleInput.value.trim();
   const author = authorInput.value.trim();
 
+  // 이 생성 작업은 웹폰트 로딩 대기 때문에 수 초가 걸릴 수 있어, 그 사이 학생이 드로어를
+  // 닫고 다른 공모전을 열어 별도 파일을 업로드하면 뒤늦게 완성된 캘리그라피가 그 새 업로드를
+  // 덮어쓸 수 있습니다. 생성 시작 시점의 활성 공모전을 기억해뒀다가, 결과를 반영하기 직전에
+  // 여전히 같은 공모전을 보고 있는지 확인합니다.
+  const contestAtGenerationStart = activeContest;
+
   // Select a beautiful random image from the pre-bundled 100 background assets!
   const themeImages = CALLIGRAPHY_THEMES_IMAGES[selectedThemeKey] || CALLIGRAPHY_THEMES_IMAGES.sky;
   const randomIndex = Math.floor(Math.random() * themeImages.length);
@@ -3439,6 +3445,9 @@ async function generateAICalligraphyCard() {
 
       // Export base64
       const resultData = canvas.toDataURL("image/png");
+
+      // 생성되는 동안 다른 공모전으로 이동했다면, 이 결과는 더 이상 유효하지 않으므로 버립니다.
+      if (activeContest !== contestAtGenerationStart) return;
       uploadBase64Data = resultData;
 
       imageContainer.innerHTML = `
@@ -3551,6 +3560,9 @@ async function generateAICalligraphyCard() {
       ctx.fillText("🎨 SORO ART GALLERY | 캘리그라피 엽서", 400, 545);
 
       const resultData = canvas.toDataURL("image/png");
+
+      // 생성되는 동안 다른 공모전으로 이동했다면, 이 결과는 더 이상 유효하지 않으므로 버립니다.
+      if (activeContest !== contestAtGenerationStart) return;
       uploadBase64Data = resultData;
 
       imageContainer.innerHTML = `
