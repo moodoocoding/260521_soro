@@ -5908,7 +5908,9 @@ window.setAdminViewMode = function(mode) {
     if (galleryView) galleryView.style.display = "none";
     if (btnTable) btnTable.classList.add("active");
     if (btnGallery) btnGallery.classList.remove("active");
-    renderAdminSubmissionsTable();
+    // 표 뷰는 아직 미구현이라 (renderAdminSubmissionsTable는 지금 hidden 처리된
+    // 갤러리 컨테이너에만 렌더링함) 여기서 호출해도 의미가 없어 생략합니다.
+    // index.html의 정적 "표 뷰는 준비 중입니다" 안내만 그대로 보여줍니다.
   } else {
     if (tableView) tableView.style.display = "none";
     if (galleryView) galleryView.style.display = "block";
@@ -6230,6 +6232,13 @@ function renderAdminSubmissionsGallery() {
 window.loadMoreAdminGallery = function() {
   adminGalleryCurrentLimit += 24;
   renderAdminSubmissionsGallery();
+};
+
+// 상세 평가 모달: 아직 구현되지 않은 기능이라, 다른 미구현 기능들("표 뷰", 미등록 젭퀴즈 링크)과
+// 동일하게 "준비 중" 안내로 처리합니다. (이전에는 함수 자체가 없어 버튼을 눌러도 아무 반응이
+// 없고 콘솔에 에러만 남았습니다.)
+window.openAdminEvalModal = function(submissionId) {
+  showToast("상세 평가 기능은 아직 준비 중입니다.", "info");
 };
 
 // 9. Toggle Star Marking
