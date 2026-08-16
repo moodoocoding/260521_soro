@@ -107,6 +107,20 @@
       </div>
     </section>
 
+    <!-- 독서 엽서 전시관 진입 섹션 -->
+    <!-- 공모전 접수 상태와 무관하게 언제나 열립니다 (감상은 접수와 별개) -->
+    <section class="postcard-hall-section" id="postcard-hall-area">
+      <div class="postcard-hall-inner">
+        <div class="postcard-hall-copy">
+          <h2>📖 독서 엽서 전시관</h2>
+          <p>친구들이 책에서 골라낸 문장으로 만든 캘리그라피 엽서를 감상하고, 마음을 남겨보세요.</p>
+        </div>
+        <button type="button" class="btn-postcard-hall" onclick="openDIDExhibition()">
+          전시관 입장하기
+        </button>
+      </div>
+    </section>
+
     <!-- 키링 명예의 전당 갤러리 섹션 -->
     <section class="keyring-gallery-section" id="keyring-gallery-area">
       <div class="keyring-gallery-header">
@@ -420,7 +434,6 @@
           <!-- Sort selector -->
           <select id="did-sort-select" class="did-sort-select" aria-label="정렬 방식 선택">
             <option value="newest">최신순</option>
-            <option value="likes">인기순 (좋아요)</option>
           </select>
           
           <!-- Auto play toggle button -->
