@@ -2473,6 +2473,275 @@ body.light-theme .xp-bar-container {
   background: #000;
 }
 
+/* ----------------------------------------------------
+   독서 엽서 갤러리 - 1열 피드
+   2열이면 엽서가 200px로 줄어 44px로 그린 붓글씨가 11px이 되어
+   읽을 수 없습니다. 1열로 두어야 글귀가 읽힙니다.
+   ---------------------------------------------------- */
+.gallery-grid.postcard-feed {
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+
+.postcard-card {
+  position: relative;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+.postcard-card.is-mine {
+  border-color: #7fbbaf;
+}
+
+.postcard-mine-tag {
+  align-self: flex-start;
+  background: #7fbbaf;
+  color: #08211d;
+  font-size: 0.63rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  padding: 4px 10px;
+}
+
+.postcard-card .gallery-card-img-wrapper {
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.postcard-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 13px;
+}
+
+.postcard-quote {
+  margin: 0;
+  font-size: 1.02rem;
+  line-height: 1.55;
+  color: var(--text-primary);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.postcard-book {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.postcard-book .pb-title {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.postcard-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border-color);
+  padding-top: 11px;
+}
+
+.postcard-byline {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.postcard-reactions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* 감상 반응 버튼 (📖 ✨ 💛) */
+.rx-btn {
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  padding: 6px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 0;
+  transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
+}
+
+.rx-btn:hover {
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+}
+
+.rx-btn:focus-visible {
+  outline: 2px solid #7fbbaf;
+  outline-offset: 2px;
+}
+
+.rx-btn.on {
+  background: rgba(127, 187, 175, 0.16);
+  border-color: #7fbbaf;
+  color: #bee3dc;
+}
+
+.rx-btn .rx-count {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 전자화랑(어두운 배경) 안에서의 반응 버튼과 글귀 */
+.did-reactions .rx-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.did-reactions .rx-btn:hover {
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #fff;
+}
+
+.did-reactions .rx-btn.on {
+  background: rgba(127, 187, 175, 0.2);
+  border-color: #7fbbaf;
+  color: #cdeae4;
+}
+
+.did-card-quote {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #fff;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.did-card-book {
+  margin: 0;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.55);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.did-card-book .pb-title {
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 700;
+}
+
+/* ----------------------------------------------------
+   키오스크 모드 (?did=1) - 복도 · 도서관 대형 스크린
+   아무도 만지지 않는 화면이므로 조작 UI를 감춥니다.
+   (닫기 버튼은 선생님이 종료할 수 있도록 남겨둡니다)
+   ---------------------------------------------------- */
+.did-modal.kiosk-mode .did-filter-bar,
+.did-modal.kiosk-mode .did-search-box,
+.did-modal.kiosk-mode .did-sort-select,
+.did-modal.kiosk-mode #did-autoplay-btn,
+.did-modal.kiosk-mode .did-slide-arrow,
+.did-modal.kiosk-mode .did-reactions {
+  display: none !important;
+}
+
+.did-modal.kiosk-mode .did-close-btn {
+  opacity: 0.25;
+  transition: opacity var(--transition-fast);
+}
+
+.did-modal.kiosk-mode .did-close-btn:hover,
+.did-modal.kiosk-mode .did-close-btn:focus-visible {
+  opacity: 1;
+}
+
+/* 멀리서도 읽히도록 글귀를 키웁니다 */
+.did-modal.kiosk-mode .did-slide-comment {
+  font-size: clamp(1.4rem, 2.6vw, 2.4rem);
+  line-height: 1.5;
+}
+
+.did-modal.kiosk-mode .did-slide-book-title {
+  font-size: clamp(1.1rem, 2vw, 1.8rem);
+}
+
+/* ----------------------------------------------------
+   독서 엽서 전시관 진입 섹션 (메인 페이지)
+   ---------------------------------------------------- */
+.postcard-hall-section {
+  margin: 48px 0 0;
+}
+
+.postcard-hall-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  padding: 24px 26px;
+}
+
+.postcard-hall-copy h2 {
+  margin: 0 0 6px;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.postcard-hall-copy p {
+  margin: 0;
+  font-size: 0.87rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  max-width: 52ch;
+}
+
+.btn-postcard-hall {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 800;
+  padding: 12px 22px;
+  cursor: pointer;
+  white-space: nowrap;
+  border-radius: 0;
+  background: var(--text-primary);
+  color: var(--bg-primary);
+  border: 1px solid var(--text-primary);
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+}
+
+.btn-postcard-hall:hover {
+  opacity: 0.86;
+  transform: translateY(-1px);
+}
+
+.btn-postcard-hall:focus-visible {
+  outline: 2px solid #7fbbaf;
+  outline-offset: 3px;
+}
+
+@media (max-width: 600px) {
+  .postcard-hall-inner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .btn-postcard-hall {
+    width: 100%;
+  }
+}
+
 /* Open DID Button */
 .btn-did-open {
   background: linear-gradient(135deg, #2563eb, #7c3aed);

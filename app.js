@@ -787,6 +787,13 @@ document.addEventListener("DOMContentLoaded", () => {
   
   // 3. 메인 페이지 초기 로드 완료 2초 후에 키링 명예의 전당 갤러리 로딩 (성능 영향도 0%)
   setTimeout(initKeyringGallery, 2000);
+
+  // 4. ?did=1 로 접속하면 복도 스크린용 전시 모드로 바로 진입합니다.
+  //    (도서관 대형 스크린에는 이 주소만 즐겨찾기 해두면 됩니다)
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get("did") === "1") {
+    enterDIDKioskMode();
+  }
 });
 
 /* 🏆 2026 키링 명예의 전당 무한 캐러셀 실시간 초기화 (미제출 시 2025 아카이브 백업 노출) */
@@ -1387,6 +1394,9 @@ function renderGallery2025(gradeFilter = "all") {
   const gridContainer = document.getElementById("gallery-grid-list");
   if (!gridContainer) return;
 
+  // 도서관 엽서 갤러리(1열 피드)를 보고 넘어온 경우가 있어 배치를 되돌립니다.
+  gridContainer.classList.remove("postcard-feed");
+
   gridContainer.innerHTML = "";
 
   const filteredData = gradeFilter === "all" 
@@ -1497,21 +1507,10 @@ async function getLibrarySubmissions(gradeFilter = "all", sortBy = "newest", sea
     });
   }
 
-  // Sort
-  if (sortBy === "likes") {
-    const likes = JSON.parse(localStorage.getItem(`soro_${contestId}_likes`) || "{}");
-    submissions.sort((a, b) => {
-      const likesA = likes[a.id] || 0;
-      const likesB = likes[b.id] || 0;
-      if (likesA !== likesB) {
-        return likesB - likesA;
-      }
-      return new Date(b.timestamp) - new Date(a.timestamp);
-    });
-  } else {
-    // Newest first
-    submissions.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-  }
+  // 항상 최신순으로 정렬합니다.
+  // ["인기순" 정렬을 일부러 없앴습니다] 초등학생 대상에서 반응 수로 줄을 세우면
+  // 작품 감상이 아니라 인기 투표가 되고, 반응이 적은 학생에게 그대로 드러납니다.
+  submissions.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
   return submissions;
 }
@@ -1522,29 +1521,30 @@ async function renderLibraryGallery(gradeFilter = "all") {
 
   const contestId = "library";
 
+  // 엽서 갤러리는 글귀가 읽혀야 하므로 1열 피드로 배치합니다.
+  gridContainer.classList.add("postcard-feed");
+
   gridContainer.innerHTML = `
-    <div style="grid-column: span 2; display: flex; flex-direction: column; align-items: center; padding: 40px; color: var(--text-secondary);">
+    <div style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; padding: 40px; color: var(--text-secondary);">
       <div class="spinner"></div>
       <p style="margin-top: 12px; font-weight: bold;">모두가 제출한 작품을 불러오고 있습니다...</p>
     </div>
   `;
 
-  const submissions = await getLibrarySubmissions(gradeFilter, "newest", "");
+  // 작품 목록과 감상 반응을 함께 불러옵니다.
+  const [submissions] = await Promise.all([
+    getLibrarySubmissions(gradeFilter, "newest", ""),
+    fetchLibraryReactions()
+  ]);
 
   gridContainer.innerHTML = "";
 
   if (submissions.length === 0) {
-    gridContainer.innerHTML = `<div class="helper-text" style="text-align: center; grid-column: span 2; padding: 40px; color: var(--text-secondary);">아직 등록된 작품이 없습니다. 🥺<br>가장 먼저 멋진 작품을 제출해 보세요!</div>`;
+    gridContainer.innerHTML = `<div class="helper-text" style="text-align: center; grid-column: 1 / -1; padding: 40px; color: var(--text-secondary);">아직 등록된 작품이 없습니다. 🥺<br>가장 먼저 멋진 작품을 제출해 보세요!</div>`;
     return;
   }
 
-  const likes = JSON.parse(localStorage.getItem(`soro_${contestId}_likes`) || "{}");
-  const likedByMe = JSON.parse(localStorage.getItem(`soro_${contestId}_liked_by_me`) || "[]");
-
   submissions.forEach(entry => {
-    const likesCount = likes[entry.id] || 0;
-    const isLiked = likedByMe.includes(entry.id);
-    
     // Dynamic image URL resolution
     let imageUrl = "";
     if (entry.data) {
@@ -1565,9 +1565,12 @@ async function renderLibraryGallery(gradeFilter = "all") {
       return;
     }
 
+    const isMine = !!(currentUser && entry.studentUsername === currentUser.userKey);
+
     const card = document.createElement("div");
-    card.className = "gallery-card";
-    
+    card.className = "gallery-card postcard-card" + (isMine ? " is-mine" : "");
+    card.setAttribute("data-sub-id", entry.id);
+
     // Mask name for privacy protection (e.g. 홍길동 -> 홍*동)
     let maskedName = entry.studentName || "학생";
     if (maskedName.length > 2) {
@@ -1576,15 +1579,10 @@ async function renderLibraryGallery(gradeFilter = "all") {
       maskedName = maskedName[0] + "*";
     }
 
-    // Dynamic title resolution
-    let displayTitle = "";
-    if (contestId === "library") {
-      displayTitle = entry.data["book-title"] || "독서 엽서";
-    } else if (contestId === "cuttoon") {
-      displayTitle = entry.data["title"] || "안전사고 예방 컷툰";
-    } else {
-      displayTitle = entry.contestTitle || "제출작";
-    }
+    const bookTitle = entry.data["book-title"] || "";
+    const bookAuthor = entry.data["book-author"] || "";
+    const bookText = entry.data["book-text"] || "";
+    const displayTitle = bookTitle || "독서 엽서";
 
     // Fetch award badge
     const awards = JSON.parse(localStorage.getItem("soro_admin_awards") || "{}");
@@ -1594,101 +1592,180 @@ async function renderLibraryGallery(gradeFilter = "all") {
       : (currentAward === "gold" ? `<span class="gallery-card-award" style="position: absolute; top: 8px; left: 8px; background: #cbd5e1; color: #000; font-size: 0.65rem; font-weight: 800; padding: 2px 6px; z-index: 10; border: 1px solid #000; border-radius: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.5);">🥈 우수</span>` : "");
 
     card.innerHTML = `
-      <div class="gallery-card-img-wrapper postcard-ratio loading" style="position: relative; cursor: pointer; overflow: hidden; border-radius: 8px;">
+      ${isMine ? `<div class="postcard-mine-tag">내 엽서</div>` : ""}
+      <div class="gallery-card-img-wrapper postcard-ratio loading" style="position: relative; cursor: pointer; overflow: hidden;">
         ${awardBadgeHtml}
-        <img class="gallery-card-img" src="${imageUrl}" alt="${displayTitle}" loading="lazy" style="width: 100%; transition: transform 0.3s;" onload="this.parentElement.classList.remove('loading')" onerror="this.src='https://placehold.co/800x600/0c0c0e/ffffff?text=No+Image'; this.parentElement.classList.remove('loading')" onclick="openImageModal('${imageUrl}')">
+        <img class="gallery-card-img" src="${imageUrl}" alt="${escapeHtml(displayTitle)}" loading="lazy" onload="this.parentElement.classList.remove('loading')" onerror="this.src='https://placehold.co/800x600/0c0c0e/ffffff?text=No+Image'; this.parentElement.classList.remove('loading')" onclick="openImageModal('${imageUrl}')">
       </div>
-      <div class="gallery-card-info" style="display:flex; justify-content:space-between; align-items:center; padding: 10px 6px;">
-        <div style="display:flex; flex-direction:column; gap:2px;">
-          <span style="font-weight:700; font-size:0.75rem; color:var(--text-secondary);">${entry.studentGrade}학년 ${entry.studentClass}반</span>
-          <span style="font-weight:700; font-size:0.9rem; color:var(--text-primary);">${maskedName}</span>
+      <div class="postcard-body">
+        ${bookText ? `<p class="postcard-quote">&ldquo;${escapeHtml(bookText)}&rdquo;</p>` : ""}
+        ${bookTitle ? `<p class="postcard-book"><span class="pb-title">${escapeHtml(bookTitle)}</span>${bookAuthor ? `<span class="pb-author">· ${escapeHtml(bookAuthor)}</span>` : ""}</p>` : ""}
+        <div class="postcard-foot">
+          <span class="postcard-byline">${entry.studentGrade}학년 · ${escapeHtml(maskedName)}</span>
+          <div class="postcard-reactions">${buildReactionButtons(entry.id)}</div>
         </div>
-        <button class="gallery-card-like-btn${isLiked ? ' liked' : ''}" onclick="toggleLikePostcard('${entry.id}', this, false)" style="background:none; border:none; color:${isLiked ? '#ef4444' : 'var(--text-secondary)'}; cursor:pointer; display:flex; align-items:center; gap:4px; font-size:0.85rem; padding: 4px; font-weight:700; transition: color 0.2s;">
-          <span class="heart-icon">${isLiked ? '❤️' : '🤍'}</span>
-          <span class="like-count">${likesCount}</span>
-        </button>
       </div>
     `;
     gridContainer.appendChild(card);
   });
+
+  // 제출 직후 넘어온 경우, 방금 낸 내 엽서로 스크롤해 보여줍니다.
+  if (pendingScrollToSubmissionId) {
+    const target = gridContainer.querySelector(`[data-sub-id="${pendingScrollToSubmissionId}"]`);
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
+    pendingScrollToSubmissionId = null;
+  }
 }
 
-function toggleLikePostcard(id, btn, fromDID = false) {
-  const contestId = "library";
-  const likesKey = `soro_${contestId}_likes`;
-  const likedByMeKey = `soro_${contestId}_liked_by_me`;
+// 학생이 입력한 글귀·도서명을 화면에 넣기 전에 안전하게 변환합니다.
+// (따옴표나 꺾쇠가 들어가도 화면이 깨지지 않도록)
+function escapeHtml(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
-  const likes = JSON.parse(localStorage.getItem(likesKey) || "{}");
-  const likedByMe = JSON.parse(localStorage.getItem(likedByMeKey) || "[]");
-  
-  const countEl = btn.querySelector(".like-count");
-  const heartEl = btn.querySelector(".heart-icon");
-  if (!countEl || !heartEl) return;
-  
-  let currentCount = parseInt(countEl.textContent, 10) || 0;
-  const isCurrentlyLiked = likedByMe.includes(id);
-  
-  if (isCurrentlyLiked) {
-    // Unlike
-    likedByMe.splice(likedByMe.indexOf(id), 1);
-    currentCount = Math.max(0, currentCount - 1);
-    likes[id] = currentCount;
-    btn.classList.remove("liked");
-    btn.style.color = fromDID ? "" : "var(--text-secondary)";
-    heartEl.textContent = "🤍";
-  } else {
-    // Like
-    likedByMe.push(id);
-    currentCount += 1;
-    likes[id] = currentCount;
-    btn.classList.add("liked");
-    btn.style.color = "#ef4444";
-    heartEl.textContent = "❤️";
-    
-    // Trigger floating heart animations (premium UX!)
-    createFloatingHeart(btn);
-  }
-  
-  localStorage.setItem(likesKey, JSON.stringify(likes));
-  localStorage.setItem(likedByMeKey, JSON.stringify(likedByMe));
-  countEl.textContent = currentCount;
+// ====================================================
+// 감상 반응 (서버 저장)
+// 예전에는 좋아요를 localStorage에만 저장해서 서로의 반응이 보이지 않았습니다.
+// 이제 Reactions 시트에 저장되어 모든 학생이 같은 숫자를 봅니다.
+// ====================================================
+const REACTION_TYPES = [
+  { key: "read", icon: "📖", label: "나도 읽고 싶어" },
+  { key: "art", icon: "✨", label: "글씨가 멋져" },
+  { key: "heart", icon: "💛", label: "마음에 남아" }
+];
 
-  // Sync both views
-  if (fromDID) {
-    // Sync to drawer
-    const activeBadge = document.querySelector(".gallery-filter-badge.active");
-    const gradeFilter = activeBadge ? activeBadge.getAttribute("data-grade") : "all";
-    renderLibraryGallery(gradeFilter);
-    // If autoplay is not active, we might also want to update the grid view items inside DID
-    if (!isDidAutoplayActive) {
-      const didGrid = document.getElementById("did-grid-view");
-      if (didGrid) {
-        const cards = didGrid.querySelectorAll(".did-card");
-        cards.forEach(card => {
-          const img = card.querySelector(".did-card-img");
-          if (img && img.getAttribute("onclick").includes(id)) {
-            const likeBtn = card.querySelector(".did-card-like-btn");
-            if (likeBtn) {
-              likeBtn.querySelector(".like-count").textContent = currentCount;
-              if (isCurrentlyLiked) {
-                likeBtn.classList.remove("liked");
-                likeBtn.querySelector(".heart-icon").textContent = "🤍";
-              } else {
-                likeBtn.classList.add("liked");
-                likeBtn.querySelector(".heart-icon").textContent = "❤️";
-              }
-            }
-          }
-        });
-      }
+// { counts: { 제출ID: { read: 3, art: 1 } }, mine: { 제출ID: ["read"] } }
+let libraryReactions = { counts: {}, mine: {} };
+
+// 제출 직후 갤러리로 넘어갈 때, 어떤 작품으로 스크롤할지 기억해 둡니다.
+let pendingScrollToSubmissionId = null;
+
+async function fetchLibraryReactions() {
+  if (!GOOGLE_SHEET_API_URL) return;
+  try {
+    const response = await fetch(GOOGLE_SHEET_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: JSON.stringify({
+        action: "getReactions",
+        contestId: "library",
+        studentUsername: currentUser ? currentUser.userKey : ""
+      })
+    });
+    const result = await response.json();
+    if (result.status === "success") {
+      libraryReactions = { counts: result.counts || {}, mine: result.mine || {} };
     }
-  } else {
-    // Sync to DID
-    const didModal = document.getElementById("did-exhibition-modal");
-    if (didModal && didModal.style.display !== "none") {
-      updateDIDExhibitionContent();
-    }
+  } catch (e) {
+    // 반응을 못 불러와도 갤러리 자체는 보여야 하므로 조용히 넘어갑니다.
+    console.warn("감상 반응을 불러오지 못했습니다:", e);
   }
+}
+
+function getReactionCount(submissionId, type) {
+  const entry = libraryReactions.counts[submissionId];
+  return (entry && entry[type]) || 0;
+}
+
+function hasMyReaction(submissionId, type) {
+  const mine = libraryReactions.mine[submissionId];
+  return Array.isArray(mine) && mine.indexOf(type) !== -1;
+}
+
+// 카드 하단의 반응 버튼 묶음을 만들어 줍니다.
+function buildReactionButtons(submissionId) {
+  return REACTION_TYPES.map(rt => {
+    const on = hasMyReaction(submissionId, rt.key);
+    const count = getReactionCount(submissionId, rt.key);
+    return `
+      <button type="button"
+              class="rx-btn${on ? " on" : ""}"
+              data-sub="${submissionId}"
+              data-rx="${rt.key}"
+              title="${rt.label}"
+              aria-label="${rt.label} ${count}개"
+              onclick="toggleReaction('${submissionId}', '${rt.key}', this)">
+        <span class="rx-icon">${rt.icon}</span><span class="rx-count">${count}</span>
+      </button>
+    `;
+  }).join("");
+}
+
+// 같은 작품의 같은 반응 버튼이 여러 화면(서랍 갤러리 · 전자화랑)에 동시에 떠 있을 수 있어
+// 화면 전체에서 짝이 되는 버튼을 모두 찾아 함께 갱신합니다.
+function paintReactionButtons(submissionId, type, reacted, count) {
+  document.querySelectorAll(`.rx-btn[data-sub="${submissionId}"][data-rx="${type}"]`).forEach(el => {
+    el.classList.toggle("on", reacted);
+    const countEl = el.querySelector(".rx-count");
+    if (countEl) countEl.textContent = count;
+    const rt = REACTION_TYPES.find(r => r.key === type);
+    if (rt) el.setAttribute("aria-label", `${rt.label} ${count}개`);
+  });
+}
+
+window.toggleReaction = async function (submissionId, type, btn) {
+  if (!currentUser) {
+    showToast("로그인하면 친구 작품에 마음을 남길 수 있어요.", "info");
+    return;
+  }
+  if (!GOOGLE_SHEET_API_URL) {
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+    return;
+  }
+
+  const wasReacted = hasMyReaction(submissionId, type);
+  const wasCount = getReactionCount(submissionId, type);
+
+  // 먼저 화면을 바꿔서 즉각 반응하게 하고, 서버 응답으로 확정합니다.
+  const optimisticReacted = !wasReacted;
+  const optimisticCount = Math.max(0, wasCount + (optimisticReacted ? 1 : -1));
+  applyReactionState(submissionId, type, optimisticReacted, optimisticCount);
+  if (optimisticReacted && btn) createFloatingHeart(btn);
+
+  try {
+    const response = await fetch(GOOGLE_SHEET_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: JSON.stringify({
+        action: "toggleReaction",
+        submissionId: submissionId,
+        studentUsername: currentUser.userKey,
+        reactionType: type
+      })
+    });
+    const result = await response.json();
+
+    if (result.status === "success") {
+      // 서버가 알려준 실제 값으로 맞춥니다 (다른 학생이 그 사이 누른 것도 반영됨).
+      applyReactionState(submissionId, type, result.reacted, result.count);
+    } else {
+      applyReactionState(submissionId, type, wasReacted, wasCount);
+      showToast(result.message || "반응을 저장하지 못했습니다.", "error");
+    }
+  } catch (e) {
+    console.error("반응 저장 실패:", e);
+    applyReactionState(submissionId, type, wasReacted, wasCount);
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+  }
+};
+
+// 로컬 상태와 화면을 한 번에 맞춥니다.
+function applyReactionState(submissionId, type, reacted, count) {
+  if (!libraryReactions.counts[submissionId]) libraryReactions.counts[submissionId] = {};
+  libraryReactions.counts[submissionId][type] = count;
+
+  const mine = libraryReactions.mine[submissionId] || [];
+  const idx = mine.indexOf(type);
+  if (reacted && idx === -1) mine.push(type);
+  if (!reacted && idx !== -1) mine.splice(idx, 1);
+  libraryReactions.mine[submissionId] = mine;
+
+  paintReactionButtons(submissionId, type, reacted, count);
 }
 
 function createFloatingHeart(btn) {
@@ -1833,7 +1910,11 @@ function closeDIDExhibition() {
 }
 
 async function updateDIDExhibitionContent() {
-  didSubmissions = await getLibrarySubmissions(didCurrentGradeFilter, didCurrentSortBy, didCurrentSearchKeyword);
+  const [loadedSubmissions] = await Promise.all([
+    getLibrarySubmissions(didCurrentGradeFilter, didCurrentSortBy, didCurrentSearchKeyword),
+    fetchLibraryReactions()
+  ]);
+  didSubmissions = loadedSubmissions;
 
   const gridView = document.getElementById("did-grid-view");
   const slideshowView = document.getElementById("did-slideshow-view");
@@ -1865,13 +1946,7 @@ function renderDIDGrid() {
     return;
   }
 
-  const contestId = "library";
-  const likedByMe = JSON.parse(localStorage.getItem(`soro_${contestId}_liked_by_me`) || "[]");
-  const likes = JSON.parse(localStorage.getItem(`soro_${contestId}_likes`) || "{}");
-
   didSubmissions.forEach(entry => {
-    const likesCount = likes[entry.id] || 0;
-    const isLiked = likedByMe.includes(entry.id);
     let imageUrl = entry.data && entry.data.image ? entry.data.image : "";
 
     // Convert Google Drive viewer link to direct image link if applicable
@@ -1903,18 +1978,14 @@ function renderDIDGrid() {
     card.innerHTML = `
       <div class="did-card-img-wrapper loading" style="position: relative;">
         ${awardBadgeHtml}
-        <img class="did-card-img" src="${imageUrl}" alt="${entry.data["book-title"] || "독서 엽서"}" loading="lazy" onload="this.parentElement.classList.remove('loading')" onerror="this.src='https://placehold.co/800x600/0c0c0e/ffffff?text=No+Image'; this.parentElement.classList.remove('loading')" onclick="openImageModal('${imageUrl}')">
+        <img class="did-card-img" src="${imageUrl}" alt="${escapeHtml(entry.data["book-title"] || "독서 엽서")}" loading="lazy" onload="this.parentElement.classList.remove('loading')" onerror="this.src='https://placehold.co/800x600/0c0c0e/ffffff?text=No+Image'; this.parentElement.classList.remove('loading')" onclick="openImageModal('${imageUrl}')">
       </div>
-      <div class="did-card-info" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 8px 4px 8px;">
-        <div class="did-card-meta" style="display: flex; flex-direction: column; gap: 2px;">
-          <span class="did-card-class" style="font-size: 0.75rem; font-weight: 700; color: rgba(255,255,255,0.5);">${entry.studentGrade}학년 ${entry.studentClass}반</span>
-          <span class="did-card-student" style="font-size: 0.9rem; font-weight: 700; color: #ffffff;">${maskedName}</span>
-        </div>
-        <div class="did-card-footer" style="margin-top: 0;">
-          <button class="did-card-like-btn${isLiked ? ' liked' : ''}" onclick="toggleLikePostcard('${entry.id}', this, true)" style="background:none; border:none; color:${isLiked ? '#ef4444' : 'rgba(255,255,255,0.4)'}; cursor:pointer; display:inline-flex; align-items:center; gap:6px; font-size:1.1rem; font-weight:700; transition: all 0.2s;">
-            <span class="heart-icon">${isLiked ? '❤️' : '🤍'}</span>
-            <span class="like-count">${likesCount}</span>
-          </button>
+      <div class="did-card-info" style="display: flex; flex-direction: column; gap: 8px; padding: 12px 8px 4px 8px;">
+        ${entry.data["book-text"] ? `<p class="did-card-quote">&ldquo;${escapeHtml(entry.data["book-text"])}&rdquo;</p>` : ""}
+        ${entry.data["book-title"] ? `<p class="did-card-book"><span class="pb-title">${escapeHtml(entry.data["book-title"])}</span>${entry.data["book-author"] ? `<span class="pb-author">· ${escapeHtml(entry.data["book-author"])}</span>` : ""}</p>` : ""}
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <span class="did-card-student" style="font-size: 0.85rem; font-weight: 700; color: rgba(255,255,255,0.62);">${entry.studentGrade}학년 · ${escapeHtml(maskedName)}</span>
+          <div class="postcard-reactions did-reactions">${buildReactionButtons(entry.id)}</div>
         </div>
       </div>
     `;
@@ -1946,12 +2017,7 @@ function renderDIDSlideshow() {
   }
 
   const entry = didSubmissions[didCurrentSlideIndex];
-  const contestId = "library";
-  const likedByMe = JSON.parse(localStorage.getItem(`soro_${contestId}_liked_by_me`) || "[]");
-  const likes = JSON.parse(localStorage.getItem(`soro_${contestId}_likes`) || "{}");
-  const likesCount = likes[entry.id] || 0;
-  const isLiked = likedByMe.includes(entry.id);
-  
+
   let imageUrl = entry.data && entry.data.image ? entry.data.image : "https://placehold.co/800x600/0c0c0e/ffffff?text=No+Image";
   if (imageUrl && imageUrl.includes("drive.google.com")) {
     imageUrl = getGoogleDriveDirectLink(imageUrl);
@@ -1976,23 +2042,19 @@ function renderDIDSlideshow() {
   slide.innerHTML = `
     <div class="did-slide-image-wrapper" style="position: relative;">
       ${awardBadgeHtml}
-      <img class="did-slide-image" src="${imageUrl}" alt="${entry.data["book-title"] || "독서 엽서"}" onclick="openImageModal('${imageUrl}')">
+      <img class="did-slide-image" src="${imageUrl}" alt="${escapeHtml(entry.data["book-title"] || "독서 엽서")}" onclick="openImageModal('${imageUrl}')">
     </div>
     <div class="did-slide-info">
       <div class="did-slide-meta">
-        <span class="did-slide-class">${entry.studentGrade}학년 ${entry.studentClass}반</span>
-        <span class="did-slide-student">${maskedName}</span>
+        <span class="did-slide-student">${entry.studentGrade}학년 · ${escapeHtml(maskedName)}</span>
       </div>
       <div class="did-slide-book">
-        <h2 class="did-slide-book-title">${entry.data["book-title"] || "도서명"}</h2>
-        <span class="did-slide-book-author">저자: ${entry.data["book-author"] || "저자"}</span>
+        <h2 class="did-slide-book-title">${escapeHtml(entry.data["book-title"] || "도서명")}</h2>
+        <span class="did-slide-book-author">저자: ${escapeHtml(entry.data["book-author"] || "저자")}</span>
       </div>
-      <div class="did-slide-comment">“${entry.data["comment"] || "인상 깊은 구절"}”</div>
+      <div class="did-slide-comment">&ldquo;${escapeHtml(entry.data["book-text"] || "")}&rdquo;</div>
       <div class="did-slide-footer">
-        <button class="did-slide-like-btn${isLiked ? ' liked' : ''}" onclick="toggleLikePostcard('${entry.id}', this, true)" style="background:none; border:none; color:${isLiked ? '#ef4444' : 'rgba(255,255,255,0.4)'}; cursor:pointer; display:inline-flex; align-items:center; gap:8px; font-size:1.3rem; font-weight:700; transition: all 0.2s;">
-          <span class="heart-icon">${isLiked ? '❤️' : '🤍'}</span>
-          <span class="like-count">${likesCount}</span>
-        </button>
+        <div class="postcard-reactions did-reactions">${buildReactionButtons(entry.id)}</div>
       </div>
     </div>
   `;
@@ -2022,14 +2084,57 @@ function navigateDIDSlide(direction) {
 
 function startDIDAutoplayInterval() {
   if (didAutoplayInterval) clearInterval(didAutoplayInterval);
-  
+
+  // 복도 스크린(키오스크)에서는 지나가며 읽어야 하므로 더 오래 머무릅니다.
+  const slideDuration = isDidKioskMode ? 8000 : 4000;
+
   didAutoplayInterval = setInterval(() => {
     didCurrentSlideIndex++;
     if (didCurrentSlideIndex >= didSubmissions.length) {
       didCurrentSlideIndex = 0;
     }
     renderDIDSlideshow();
-  }, 4000); // 4 seconds transition
+  }, slideDuration);
+}
+
+// ====================================================
+// 키오스크 모드 (복도 · 도서관 대형 스크린용)
+// 주소 뒤에 ?did=1 을 붙이면 로그인 없이 전시가 바로 열립니다.
+// 조작 UI를 감추고, 새로 들어온 작품이 반영되도록 주기적으로 다시 불러옵니다.
+// ====================================================
+let isDidKioskMode = false;
+let didKioskRefreshInterval = null;
+const DID_KIOSK_REFRESH_MS = 3 * 60 * 1000; // 3분마다 새 작품 확인
+
+async function enterDIDKioskMode() {
+  isDidKioskMode = true;
+
+  const modal = document.getElementById("did-exhibition-modal");
+  if (modal) modal.classList.add("kiosk-mode");
+
+  // 슬라이드쇼가 자동으로 돌아가는 상태로 시작합니다.
+  isDidAutoplayActive = true;
+  await openDIDExhibition();
+
+  const gridView = document.getElementById("did-grid-view");
+  const slideshowView = document.getElementById("did-slideshow-view");
+  if (gridView) gridView.style.display = "none";
+  if (slideshowView) slideshowView.style.display = "flex";
+  renderDIDSlideshow();
+  startDIDAutoplayInterval();
+
+  if (didKioskRefreshInterval) clearInterval(didKioskRefreshInterval);
+  didKioskRefreshInterval = setInterval(async () => {
+    // 낮에 학생이 새로 제출한 작품이 화면에 반영되도록 데이터만 갱신합니다.
+    const [fresh] = await Promise.all([
+      getLibrarySubmissions("all", "newest", ""),
+      fetchLibraryReactions()
+    ]);
+    if (Array.isArray(fresh) && fresh.length > 0) {
+      didSubmissions = fresh;
+      if (didCurrentSlideIndex >= didSubmissions.length) didCurrentSlideIndex = 0;
+    }
+  }, DID_KIOSK_REFRESH_MS);
 }
 
 function toggleDIDAutoplay() {
@@ -5145,11 +5250,19 @@ async function executeSubmit() {
         return;
       }
 
-      const successMsg = isZepSubmit 
+      const successMsg = isZepSubmit
         ? `${activeContest.title} 이벤트 참여 확인이 성공적으로 기록되었습니다! ✅`
         : `${activeContest.title} 대회의 작품 접수가 성공적으로 클라우드에 기록되었습니다! 🎨`;
       showToast(successMsg, "success");
-      closeContestDrawer();
+
+      // 독서 엽서는 제출이 끝이 아니라 전시의 시작입니다.
+      // 서랍을 닫아버리는 대신 갤러리로 이어서, 친구들 작품을 보고 반응을 남기게 합니다.
+      if (activeContest.id === "library") {
+        pendingScrollToSubmissionId = newEntry.id;
+        switchDrawerTab("gallery");
+      } else {
+        closeContestDrawer();
+      }
       updateLiveCounters();
     } catch (e) {
       console.error(e);
@@ -7967,6 +8080,84 @@ function doPost(e) {
       }
     }
 
+    // 14. 감상 반응 조회 액션 (Reactions 시트)
+    // 갤러리에 표시할 작품별 반응 수와, 요청한 학생이 누른 반응 목록을 함께 돌려줍니다.
+    else if (requestData.action === "getReactions") {
+      var rxSheet = ss.getSheetByName("Reactions");
+      var counts = {};
+      var mine = {};
+
+      if (rxSheet) {
+        var rxData = rxSheet.getDataRange().getValues();
+        var rxStart = getStartIndex(rxData, "SubmissionID");
+        var askerKey = requestData.studentUsername || "";
+
+        for (var ri = rxStart; ri < rxData.length; ri++) {
+          var subId = rxData[ri][0];
+          var who = rxData[ri][1];
+          var rxType = rxData[ri][2];
+          if (!subId || !rxType) continue;
+
+          if (!counts[subId]) counts[subId] = {};
+          counts[subId][rxType] = (counts[subId][rxType] || 0) + 1;
+
+          if (askerKey && who === askerKey) {
+            if (!mine[subId]) mine[subId] = [];
+            mine[subId].push(rxType);
+          }
+        }
+      }
+
+      response = { status: "success", counts: counts, mine: mine };
+    }
+
+    // 15. 감상 반응 토글 액션 (Reactions 시트)
+    // 같은 학생이 같은 작품에 같은 종류의 반응을 이미 남겼다면 취소, 아니면 추가합니다.
+    else if (requestData.action === "toggleReaction") {
+      var ALLOWED_REACTIONS = ["read", "art", "heart"];
+      var targetId = requestData.submissionId;
+      var actorKey = requestData.studentUsername;
+      var wantType = requestData.reactionType;
+
+      if (!targetId || !actorKey || ALLOWED_REACTIONS.indexOf(wantType) === -1) {
+        response = { status: "error", message: "잘못된 요청입니다." };
+      } else if (!isRegisteredStudent(ss, actorKey)) {
+        // 제출과 동일한 수준의 신원 확인 - 가입되지 않은 계정으로는 반응을 남길 수 없습니다.
+        response = { status: "error", message: "가입된 학생 정보가 아닙니다." };
+      } else {
+        var sheet = ss.getSheetByName("Reactions");
+        if (!sheet) {
+          sheet = ss.insertSheet("Reactions");
+          sheet.appendRow(["SubmissionID", "StudentUsername", "ReactionType", "Timestamp"]);
+        }
+
+        var data = sheet.getDataRange().getValues();
+        var startIndex = getStartIndex(data, "SubmissionID");
+        var foundRow = -1;
+        var newCount = 0;
+
+        for (var i = startIndex; i < data.length; i++) {
+          if (data[i][0] === targetId && data[i][2] === wantType) {
+            newCount++;
+            if (data[i][1] === actorKey) foundRow = i;
+          }
+        }
+
+        var nowReacted;
+        if (foundRow !== -1) {
+          sheet.deleteRow(foundRow + 1);
+          newCount--;
+          nowReacted = false;
+        } else {
+          sheet.appendRow([targetId, actorKey, wantType, new Date().toLocaleString("ko-KR")]);
+          newCount++;
+          nowReacted = true;
+        }
+
+        response = { status: "success", reacted: nowReacted, count: newCount };
+      }
+    }
+
   } catch (error) {
     response = { status: "error", message: error.toString() };
   }
@@ -7982,6 +8173,20 @@ function getStartIndex(data, headerText) {
     return 1;
   }
   return 0;
+}
+
+// [헬퍼] Users 시트에 실제로 가입된 계정인지 확인합니다.
+function isRegisteredStudent(ss, userKey) {
+  if (!userKey) return false;
+  var usersSheet = ss.getSheetByName("Users");
+  if (!usersSheet) return false;
+
+  var data = usersSheet.getDataRange().getValues();
+  var startIndex = getStartIndex(data, "UserKey");
+  for (var i = startIndex; i < data.length; i++) {
+    if (data[i][0] === userKey) return true;
+  }
+  return false;
 }
 
 // URL에서 구글 드라이브 파일 ID를 추출하는 헬퍼 함수
