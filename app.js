@@ -1157,49 +1157,20 @@ async function handleLogin(grade, classNum, number, name, password) {
     };
 
     try {
-      let response = await fetch(GOOGLE_SHEET_API_URL, {
+      // 서버 왕복 1회로 끝냅니다.
+      // 예전 평문 비밀번호 계정의 확인과 해시 전환은 서버가 같은 요청 안에서 처리합니다.
+      // (예전에는 "해시 시도 → 평문 재시도 → 해시로 재가입" 3번을 왕복해서
+      //  Apps Script 특성상 왕복당 3초씩, 로그인이 10초 가까이 걸렸습니다.)
+      const response = await fetch(GOOGLE_SHEET_API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: JSON.stringify(payload)
       });
-      let result = await response.json();
+      const result = await response.json();
 
       if (result.status === "error") {
-        console.log("Hash login failed, attempting legacy plain text fallback...");
-        
-        payload.password = password; // 평문으로 재조회 시도
-        response = await fetch(GOOGLE_SHEET_API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: JSON.stringify(payload)
-        });
-        result = await response.json();
-        
-        if (result.status === "error") {
-          showToast("학년/반/번호/이름 또는 비밀번호가 일치하지 않습니다.", "error");
-          return false;
-        }
-        
-        console.log("Legacy plain text login success! Upgrading user credentials to SHA-256 hash...");
-        const upgradePayload = {
-          action: "signUp",
-          userKey: userKey,
-          grade: grade,
-          classNum: classNum,
-          number: number,
-          name: name,
-          password: hashedPassword
-        };
-        
-        try {
-          await fetch(GOOGLE_SHEET_API_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: JSON.stringify(upgradePayload)
-          });
-        } catch (upgradeErr) {
-          console.error("Failed to upgrade remote database password to hash:", upgradeErr);
-        }
+        showToast("학년/반/번호/이름 또는 비밀번호가 일치하지 않습니다.", "error");
+        return false;
       }
 
       const loggedUser = { userKey, grade, classNum, number, name };
@@ -7429,15 +7400,27 @@ function doPost(e) {
     else if (requestData.action === "login") {
       var sheet = ss.getSheetByName("Users");
       var authenticated = false;
-      
+
       if (sheet) {
         var data = sheet.getDataRange().getValues();
         var startIndex = getStartIndex(data, "UserKey");
+        var sentHash = String(requestData.password); // 클라이언트는 항상 해시를 보냅니다
+
         for (var i = startIndex; i < data.length; i++) {
-          if (data[i][0] === requestData.userKey && String(data[i][5]) === String(requestData.password)) {
+          if (data[i][0] !== requestData.userKey) continue;
+
+          var stored = String(data[i][5]);
+          if (stored === sentHash) {
+            // 이미 해시로 저장된 계정
             authenticated = true;
-            break;
+          } else if (sha256Hex(stored) === sentHash) {
+            // [예전 평문 비밀번호] 서버에서 직접 대조하고 그 자리에서 해시로 교체합니다.
+            // 예전에는 이걸 클라이언트가 "해시 실패 → 평문 재시도 → 해시로 재가입"
+            // 3번의 왕복으로 처리해서 로그인이 10초 가까이 걸렸습니다.
+            authenticated = true;
+            sheet.getRange(i + 1, 6).setValue(sentHash);
           }
+          break;
         }
       }
       
@@ -8250,6 +8233,19 @@ function getStartIndex(data, headerText) {
     return 1;
   }
   return 0;
+}
+
+// [헬퍼] 클라이언트의 hashPassword()와 똑같은 SHA-256 16진수 문자열을 만듭니다.
+// 예전 평문 비밀번호를 서버에서 직접 대조하기 위해 필요합니다.
+function sha256Hex(text) {
+  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(text), Utilities.Charset.UTF_8);
+  var hex = "";
+  for (var i = 0; i < bytes.length; i++) {
+    var b = bytes[i] < 0 ? bytes[i] + 256 : bytes[i];
+    var s = b.toString(16);
+    hex += (s.length === 1 ? "0" : "") + s;
+  }
+  return hex;
 }
 
 // [헬퍼] 해당 공모전이 잠겨 있는지(접수 마감 상태인지) 확인합니다.
