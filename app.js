@@ -690,7 +690,6 @@ const _preservedPrizeStatus = new Map();
 
 // User Authentication States
 let currentUser = null;
-let GOOGLE_SHEET_API_URL_error = false;
 
 // Auth Form Grade/Class/Number dropdown config
 const GRADE_CLASS_LIMITS = {
@@ -1017,6 +1016,8 @@ function updateUIForLoggedOutState() {
 function executeLogout() {
   localStorage.removeItem("soro_current_user");
   currentUser = null;
+  // 다음 사용자가 이전 사용자의 제출 내역을 보지 않도록 캐시를 비웁니다.
+  invalidateMySubmissionsCache();
   updateUIForLoggedOutState();
   updateLiveCounters();
   renderContestGrid();
@@ -1398,61 +1399,134 @@ function renderGallery2025(gradeFilter = "all") {
   });
 }
 
-// ONLINE LIBRARY SUBMISSIONS GALLERY (2026 SUBMISSIONS)
 // ====================================================
-async function getLibrarySubmissions(gradeFilter = "all", sortBy = "newest", searchKeyword = "") {
-  const contestId = "library";
-  let submissions = [];
+// 내 제출 내역 (서버 왕복 절약용 캐시)
+// 같은 데이터를 공모전 서랍 열 때·픽셀 에디터 열 때·카운터 갱신할 때 등
+// 여러 곳에서 따로 받아오고 있었습니다. 왕복 1회가 3~8초라 그만큼 그대로 기다림이 됩니다.
+// 제출·취소처럼 내역이 실제로 바뀌는 순간에만 캐시를 비웁니다.
+// ====================================================
+let _mySubmissionsCache = null;
+let _mySubmissionsCacheKey = null;
+let _mySubmissionsPromise = null;
 
-  // 1. Fetch from Google Sheets Apps Script API URL
-  if (GOOGLE_SHEET_API_URL) {
-    const payload = {
-      action: "getAllSubmissions",
-      contestId: contestId
-    };
+function invalidateMySubmissionsCache() {
+  _mySubmissionsCache = null;
+  _mySubmissionsCacheKey = null;
+  _mySubmissionsPromise = null;
+}
+
+async function getMySubmissions(forceRefresh = false) {
+  if (!currentUser || !GOOGLE_SHEET_API_URL) return [];
+
+  // 다른 계정으로 로그인했다면 이전 캐시를 쓰면 안 됩니다.
+  if (_mySubmissionsCacheKey && _mySubmissionsCacheKey !== currentUser.userKey) {
+    invalidateMySubmissionsCache();
+  }
+
+  if (!forceRefresh && _mySubmissionsCache) return _mySubmissionsCache;
+  if (!forceRefresh && _mySubmissionsPromise) return _mySubmissionsPromise;
+
+  const ownerKey = currentUser.userKey;
+  _mySubmissionsPromise = (async () => {
     try {
       const response = await fetch(GOOGLE_SHEET_API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ action: "getSubmissions", studentUsername: ownerKey })
       });
       const result = await response.json();
       if (result.status === "success" && Array.isArray(result.data)) {
-        submissions = result.data;
+        _mySubmissionsCache = result.data;
+        _mySubmissionsCacheKey = ownerKey;
+        _mySubmissionsPromise = null;
+        return _mySubmissionsCache;
       }
     } catch (e) {
-      console.error(`Failed to fetch ${contestId} submissions remotely:`, e);
+      console.error("제출 내역 원격 조회 에러:", e);
     }
-  }
+    _mySubmissionsPromise = null;
+    return [];
+  })();
 
-  // Normalize entry.data (Ensure it is parsed into an Object if it is a JSON string from Google Sheets API)
-  submissions.forEach(entry => {
-    if (entry && entry.data && typeof entry.data === "string") {
+  return _mySubmissionsPromise;
+}
+
+// ONLINE LIBRARY SUBMISSIONS GALLERY (2026 SUBMISSIONS)
+// ====================================================
+// [성능] 서버 왕복 1회가 3~8초나 걸리는데, 학년 필터·검색·정렬은 전부 받아온 뒤
+// 클라이언트에서 처리합니다. 그래서 목록은 한 번만 받아 캐시에 두고,
+// 필터를 바꿀 때는 캐시를 다시 걸러 즉시 보여줍니다.
+let _libraryCache = null;
+let _libraryCachePromise = null;
+
+function invalidateLibraryCache() {
+  _libraryCache = null;
+  _libraryCachePromise = null;
+}
+
+async function fetchLibrarySubmissionsRaw(forceRefresh = false) {
+  if (!forceRefresh && _libraryCache) return _libraryCache;
+  // 이미 요청이 진행 중이면 그 요청을 같이 기다립니다 (중복 호출 방지).
+  if (!forceRefresh && _libraryCachePromise) return _libraryCachePromise;
+
+  _libraryCachePromise = (async () => {
+    let submissions = [];
+
+    if (GOOGLE_SHEET_API_URL) {
       try {
-        entry.data = JSON.parse(entry.data);
-      } catch (err) {
-        console.warn("Failed to parse entry.data JSON string:", err);
+        const response = await fetch(GOOGLE_SHEET_API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: JSON.stringify({ action: "getAllSubmissions", contestId: "library" })
+        });
+        const result = await response.json();
+        if (result.status === "success" && Array.isArray(result.data)) {
+          submissions = result.data;
+        }
+      } catch (e) {
+        console.error("Failed to fetch library submissions remotely:", e);
+      }
+    }
+
+    // Normalize entry.data (Ensure it is parsed into an Object if it is a JSON string from Google Sheets API)
+    submissions.forEach(entry => {
+      if (entry && entry.data && typeof entry.data === "string") {
+        try {
+          entry.data = JSON.parse(entry.data);
+        } catch (err) {
+          console.warn("Failed to parse entry.data JSON string:", err);
+          entry.data = {};
+        }
+      } else if (entry && !entry.data) {
         entry.data = {};
       }
-    } else if (entry && !entry.data) {
-      entry.data = {};
-    }
-  });
+    });
 
-  // [Premium 1인 1작품 제한 필터] 학생당 가장 마지막(최신)으로 제출한 1개의 작품만 노출 및 중복 제거
-  const latestSubmissionsMap = new Map();
-  submissions.forEach(entry => {
-    const studentKey = entry.studentUsername ? entry.studentUsername.toLowerCase() : (entry.studentName ? entry.studentName.toLowerCase() : "");
-    if (studentKey) {
-      const existing = latestSubmissionsMap.get(studentKey);
-      if (!existing || new Date(entry.timestamp) > new Date(existing.timestamp)) {
-        latestSubmissionsMap.set(studentKey, entry);
+    // [Premium 1인 1작품 제한 필터] 학생당 가장 마지막(최신)으로 제출한 1개의 작품만 노출 및 중복 제거
+    const latestSubmissionsMap = new Map();
+    submissions.forEach(entry => {
+      const studentKey = entry.studentUsername ? entry.studentUsername.toLowerCase() : (entry.studentName ? entry.studentName.toLowerCase() : "");
+      if (studentKey) {
+        const existing = latestSubmissionsMap.get(studentKey);
+        if (!existing || new Date(entry.timestamp) > new Date(existing.timestamp)) {
+          latestSubmissionsMap.set(studentKey, entry);
+        }
+      } else {
+        latestSubmissionsMap.set(entry.id, entry);
       }
-    } else {
-      latestSubmissionsMap.set(entry.id, entry);
-    }
-  });
-  submissions = Array.from(latestSubmissionsMap.values());
+    });
+
+    _libraryCache = Array.from(latestSubmissionsMap.values());
+    _libraryCachePromise = null;
+    return _libraryCache;
+  })();
+
+  return _libraryCachePromise;
+}
+
+async function getLibrarySubmissions(gradeFilter = "all", sortBy = "newest", searchKeyword = "", forceRefresh = false) {
+  const cached = await fetchLibrarySubmissionsRaw(forceRefresh);
+  let submissions = cached.slice(); // 캐시 원본이 필터링으로 훼손되지 않도록 복사본을 씁니다
 
   // Filter by grade
   if (gradeFilter !== "all") {
@@ -2092,8 +2166,9 @@ async function enterDIDKioskMode() {
   if (didKioskRefreshInterval) clearInterval(didKioskRefreshInterval);
   didKioskRefreshInterval = setInterval(async () => {
     // 낮에 학생이 새로 제출한 작품이 화면에 반영되도록 데이터만 갱신합니다.
+    // 여기서는 캐시를 무시하고 서버에서 새로 받아와야 합니다.
     const [fresh] = await Promise.all([
-      getLibrarySubmissions("all", "newest", ""),
+      getLibrarySubmissions("all", "newest", "", true),
       fetchLibraryReactions()
     ]);
     if (Array.isArray(fresh) && fresh.length > 0) {
@@ -2509,27 +2584,8 @@ async function checkAndRenderSubmissionArea(contest) {
   `;
   formContainer.appendChild(loadingIndicator);
 
-  // 1. 원격 또는 로컬 제출 목록 조회
-  let mySubmissions = [];
-  if (GOOGLE_SHEET_API_URL) {
-    const payload = {
-      action: "getSubmissions",
-      studentUsername: currentUser.userKey
-    };
-    try {
-      const response = await fetch(GOOGLE_SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify(payload)
-      });
-      const result = await response.json();
-      if (result.status === "success") {
-        mySubmissions = result.data;
-      }
-    } catch (e) {
-      console.error("제출 내역 원격 조회 에러:", e);
-    }
-  }
+  // 1. 제출 목록 조회 (같은 세션에서 이미 받아왔다면 캐시를 씁니다)
+  const mySubmissions = await getMySubmissions();
 
   // 이 요청이 시작된 이후 드로어가 다른 공모전으로 전환됐다면, 이 응답은 이미 낡은 것이므로 화면에 반영하지 않습니다.
   if (requestToken !== submissionAreaRequestToken) return;
@@ -2657,21 +2713,15 @@ window.cancelSubmissionInDrawer = async function (entryId) {
   if (confirm("정말 이 작품의 접수를 취소하고 삭제하시겠습니까? 한 번 지워진 접수 데이터는 복구할 수 없습니다.")) {
     if (GOOGLE_SHEET_API_URL) {
       // [사은품 보존] 삭제 전에 기존 제출물의 prizeStatus를 임시 저장
+      // (드로어를 열 때 이미 받아온 목록이라 대부분 캐시에서 즉시 나옵니다)
       if (activeContest) {
         try {
-          const lookupRes = await fetch(GOOGLE_SHEET_API_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: JSON.stringify({ action: "getSubmissions", studentUsername: currentUser.userKey })
-          });
-          const lookupResult = await lookupRes.json();
-          if (lookupResult.status === "success") {
-            const oldEntry = lookupResult.data.find(s => s.id === entryId);
-            if (oldEntry && oldEntry.data && oldEntry.data.prizeStatus === "delivered") {
-              const preserveKey = `${currentUser.userKey}_${activeContest.id}`;
-              _preservedPrizeStatus.set(preserveKey, "delivered");
-              console.log(`[사은품 보존] ${preserveKey} → prizeStatus 임시 저장됨`);
-            }
+          const myList = await getMySubmissions();
+          const oldEntry = myList.find(s => s.id === entryId);
+          if (oldEntry && oldEntry.data && oldEntry.data.prizeStatus === "delivered") {
+            const preserveKey = `${currentUser.userKey}_${activeContest.id}`;
+            _preservedPrizeStatus.set(preserveKey, "delivered");
+            console.log(`[사은품 보존] ${preserveKey} → prizeStatus 임시 저장됨`);
           }
         } catch (lookupErr) {
           console.warn("사은품 상태 조회 실패 (무시):", lookupErr);
@@ -2698,6 +2748,8 @@ window.cancelSubmissionInDrawer = async function (entryId) {
         }
 
         showToast("작품 접수 정보가 성공적으로 취소 및 삭제 처리되었습니다. ✨", "success");
+        invalidateLibraryCache();
+        invalidateMySubmissionsCache();
         updateLiveCounters();
         if (activeContest) {
           checkAndRenderSubmissionArea(activeContest);
@@ -4659,19 +4711,10 @@ function initPixelArtEditor() {
   // ==== Load Draft from Cloud quietly in the background ====
   async function loadCloudDraft() {
     if (!currentUser || !GOOGLE_SHEET_API_URL) return;
-    const payload = {
-      action: "getSubmissions",
-      studentUsername: currentUser.userKey
-    };
     try {
-      const response = await fetch(GOOGLE_SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify(payload)
-      });
-      const result = await response.json();
-      if (result.status === "success" && Array.isArray(result.data)) {
-        const cloudDraft = result.data.find(entry => entry.id === `pixelart_draft_${currentUser.userKey}`);
+      const myList = await getMySubmissions();
+      if (Array.isArray(myList)) {
+        const cloudDraft = myList.find(entry => entry.id === `pixelart_draft_${currentUser.userKey}`);
         if (cloudDraft && cloudDraft.data && Array.isArray(cloudDraft.data.pixelData)) {
           pixelData = cloudDraft.data.pixelData;
           renderGrid();
@@ -5221,6 +5264,10 @@ async function executeSubmit() {
         : `${activeContest.title} 대회의 작품 접수가 성공적으로 클라우드에 기록되었습니다! 🎨`;
       showToast(successMsg, "success");
 
+      // 방금 낸 작품이 갤러리에 바로 보이도록 캐시를 비웁니다.
+      invalidateLibraryCache();
+      invalidateMySubmissionsCache();
+
       // 독서 엽서는 제출이 끝이 아니라 전시의 시작입니다.
       // 서랍을 닫아버리는 대신 갤러리로 이어서, 친구들 작품을 보고 반응을 남기게 합니다.
       if (activeContest.id === "library") {
@@ -5275,32 +5322,11 @@ async function executeLoggedInLookup() {
   let mySubmissions = [];
 
   if (GOOGLE_SHEET_API_URL) {
-    const payload = {
-      action: "getSubmissions",
-      studentUsername: currentUser.userKey
-    };
-    try {
-      const response = await fetch(GOOGLE_SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify(payload)
-      });
-      const result = await response.json();
-      if (result.status === "success") {
-        mySubmissions = result.data;
-        
-
-      } else {
-        showToast(result.message || "데이터를 불러오는 중 오류가 발생했습니다.", "error");
-      }
-    } catch (e) {
-      console.error(e);
-      showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
-      GOOGLE_SHEET_API_URL_error = true;
-    }
+    // 같은 세션에서 이미 받아온 목록이 있으면 즉시 보여줍니다.
+    // (제출·취소 시 캐시를 비우므로 항상 최신 내역입니다)
+    mySubmissions = await getMySubmissions();
   } else {
     showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
-    GOOGLE_SHEET_API_URL_error = true;
   }
 
   // 임시저장 본은 제출 목록 리스트에서 제외
@@ -5554,6 +5580,8 @@ window.confirmDeleteEntry = async function (entryId) {
         }
 
         showToast("작품 접수 정보가 성공적으로 취소 및 삭제 처리되었습니다.", "success");
+        invalidateLibraryCache();
+        invalidateMySubmissionsCache();
         updateLiveCounters();
       } catch (e) {
         console.error(e);
@@ -5569,35 +5597,31 @@ window.confirmDeleteEntry = async function (entryId) {
 // COUNTERS & TOAST NOTIFICATION UTILITIES
 // ====================================================
 async function updateLiveCounters() {
-  let count = 0;
+  const counterEl = document.getElementById("stat-my-submissions");
+  if (!counterEl) return;
 
-  if (currentUser) {
-    if (GOOGLE_SHEET_API_URL) {
-      // Quietly query count from Google Sheets
-      const payload = {
-        action: "getSubmissions",
-        studentUsername: currentUser.userKey
-      };
-      try {
-        const response = await fetch(GOOGLE_SHEET_API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: JSON.stringify(payload)
-        });
-        const result = await response.json();
-        if (result.status === "success") {
-          const filtered = result.data.filter(entry => entry.contestId !== "pixelart_draft");
-          count = filtered.length;
-          document.getElementById("stat-my-submissions").textContent = `${count}개`;
-          return;
-        }
-      } catch (e) {
-        console.error("Failed to query live counter count remotely:", e);
-      }
+  if (!currentUser || !GOOGLE_SHEET_API_URL) {
+    counterEl.textContent = "0개";
+    return;
+  }
+
+  // 이 조회가 어느 계정 것이었는지 기억해 둡니다.
+  const requestedFor = currentUser.userKey;
+
+  try {
+    const myList = await getMySubmissions();
+
+    // 조회하는 사이 로그아웃했거나 다른 계정으로 바뀌었다면 화면에 쓰지 않습니다.
+    // (예전에는 로그아웃 직후 늦게 도착한 응답이 "0개"를 이전 사용자의 숫자로 덮어썼습니다)
+    if (!currentUser || currentUser.userKey !== requestedFor) return;
+
+    const filtered = myList.filter(entry => entry.contestId !== "pixelart_draft");
+    counterEl.textContent = `${filtered.length}개`;
+  } catch (e) {
+    console.error("Failed to query live counter count remotely:", e);
+    if (currentUser && currentUser.userKey === requestedFor) {
+      counterEl.textContent = "0개";
     }
-    document.getElementById("stat-my-submissions").textContent = "0개";
-  } else {
-    document.getElementById("stat-my-submissions").textContent = "0개";
   }
 }
 
