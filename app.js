@@ -306,7 +306,7 @@ const CONTESTS_DATA = [
     month: 9,
     monthText: "9월",
     activeMonths: [8, 9],
-    period: "2026. 8. 10.(목) ~ 2026. 9. 30.(수)",
+    period: "2026. 8. 24.(월) ~ 2026. 9. 30.(수)",
     summary: "도서관 책 속 깊은 울림을 준 글귀를 타이핑하여 나만의 AI 캘리그라피 엽서로 만들어보세요.",
     description: "독서의 달 9월을 맞이하여, 자신이 감명 깊게 읽은 책 속의 한 줄이나 추천 글귀를 붓글씨 캘리그라피와 인공지능이 생성한 감성 배경을 결합한 엽서 카드 형태로 창작해 제출하는 디지털 문학 공모전입니다.",
     rules: [
@@ -636,7 +636,6 @@ const GALLERY_2025_DATA = RAW_2025_KEYRING_DATA.trim().split("\n").map(line => {
 // STATE MANAGEMENT & USER SESSION CONFIGURATION
 // ====================================================
 let currentVirtualMonth = 8;
-const FORCE_ACTIVE_CONTESTS = [];
 
 function checkIsAdmin() {
   // [보안] 프로필 값(학년/반/번호/이름) 비교만으로는 devtools에서 localStorage를 조작해 통과할 수 있으므로,
@@ -672,18 +671,14 @@ function getContestStatus(contestOrMonth) {
     }
   }
   
-  if (contestOrMonth && typeof contestOrMonth === "string" && contestOrMonth.startsWith("zepquiz_")) {
-    const roundNum = parseInt(contestOrMonth.substring(8), 10);
-    const activeRoundNum = parseInt(currentActiveZepRound, 10);
-    if (roundNum === activeRoundNum) {
-      return "active";
-    } else if (roundNum < activeRoundNum) {
-      return "closed";
-    } else {
-      return "pending";
-    }
+  // 젭퀴즈가 아닌 공모전은 관리자가 설정한 잠금 상태를 따릅니다.
+  // (Settings 시트의 contest_lock_<공모전ID> 값 → fetchContestLocks()가 가져옴)
+  // 날짜로 자동 개폐하지 않는 것은 의도된 운영 방식입니다. 관리자가 직접 열고 닫습니다.
+  // 잠금 정보가 아직 없는 공모전은 안전하게 '마감'으로 둡니다.
+  if (contestId && contestLocks[contestId] === false) {
+    return "active";
   }
-  
+
   return "closed";
 }
 
@@ -6618,6 +6613,84 @@ let adminCurrentTabMode = "contest"; // "contest" | "zepquiz"
 let zepQuizClassesData = null; // 원격에서 가져온 젭퀴즈 데이터 저장용
 let currentDrilldownClassKey = null;
 
+// ====================================================
+// 공모전 접수 열기/닫기 (관리자)
+// Settings 시트의 contest_lock_<공모전ID> 값을 켜고 끕니다.
+// 날짜로 자동 개폐하지 않고 관리자가 직접 통제하는 방식입니다.
+// ====================================================
+function renderAdminContestLocks() {
+  const listEl = document.getElementById("admin-lock-list");
+  if (!listEl) return;
+
+  // 젭퀴즈는 '활성 회차' 방식으로 따로 관리하므로 여기서 제외합니다.
+  const lockableContests = CONTESTS_DATA.filter(c => !c.id.startsWith("zepquiz_"));
+
+  listEl.innerHTML = lockableContests.map(contest => {
+    const isOpen = contestLocks[contest.id] === false;
+    return `
+      <button type="button"
+              class="admin-lock-chip${isOpen ? " open" : ""}"
+              id="lock-chip-${contest.id}"
+              onclick="toggleContestLock('${contest.id}')"
+              aria-pressed="${isOpen}">
+        <span class="lock-state">${isOpen ? "접수중" : "마감"}</span>
+        <span class="lock-name">${escapeHtml(contest.title)}</span>
+      </button>
+    `;
+  }).join("");
+}
+
+window.toggleContestLock = async function (contestId) {
+  if (!GOOGLE_SHEET_API_URL) {
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+    return;
+  }
+
+  const contest = CONTESTS_DATA.find(c => c.id === contestId);
+  const contestName = contest ? contest.title : contestId;
+  const currentlyOpen = contestLocks[contestId] === false;
+  const nextLocked = currentlyOpen; // 열려 있었다면 잠그고, 잠겨 있었다면 엽니다.
+
+  const confirmMsg = nextLocked
+    ? `'${contestName}' 접수를 마감할까요?\n학생들이 더 이상 제출할 수 없게 됩니다.`
+    : `'${contestName}' 접수를 지금 열까요?\n학생들이 바로 제출할 수 있게 됩니다.`;
+  if (!confirm(confirmMsg)) return;
+
+  const chip = document.getElementById(`lock-chip-${contestId}`);
+  if (chip) chip.disabled = true;
+
+  try {
+    const response = await fetch(GOOGLE_SHEET_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: JSON.stringify({
+        action: "updateContestLock",
+        contestId: contestId,
+        isLocked: nextLocked,
+        adminToken: getAdminToken()
+      })
+    });
+    const result = await response.json();
+
+    if (result.status === "success") {
+      contestLocks[contestId] = nextLocked;
+      renderAdminContestLocks();
+      renderContestGrid(); // 학생 화면의 카드 상태도 즉시 반영
+      showToast(
+        nextLocked ? `'${contestName}' 접수를 마감했습니다.` : `'${contestName}' 접수를 열었습니다! 🎉`,
+        "success"
+      );
+    } else {
+      showToast("변경 실패: " + (result.message || "알 수 없는 오류"), "error");
+      if (chip) chip.disabled = false;
+    }
+  } catch (e) {
+    console.error("공모전 잠금 변경 실패:", e);
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+    if (chip) chip.disabled = false;
+  }
+};
+
 // 듀얼 모드 탭 전환 함수
 window.setAdminTabMode = function(mode) {
   adminCurrentTabMode = mode;
@@ -6665,6 +6738,7 @@ window.setAdminTabMode = function(mode) {
     
     // 기존 공모전 데이터 렌더링
     renderAdminKPIs();
+    renderAdminContestLocks();
     if (adminCurrentViewMode === "gallery") {
       renderAdminSubmissionsGallery();
     } else {
@@ -7444,9 +7518,12 @@ function doPost(e) {
           submitBlockedReason = "현재 진행 중인 회차가 아닙니다.";
         }
       } else if (entry.contestId !== "pixelart_draft" && !isValidAdminToken(requestData.adminToken)) {
-        // 젭퀴즈가 아닌 공모전은 아직 접수를 여는 기능이 없으므로, 관리자 토큰 없이는 접수를 막습니다.
+        // 젭퀴즈가 아닌 공모전은 Settings 시트의 잠금 값(contest_lock_<공모전ID>)을 따릅니다.
+        // 관리자가 명시적으로 잠금을 해제한 공모전만 접수를 받습니다.
         // (단, "pixelart_draft"는 픽셀아트 에디터의 임시저장 내부 기능이라 예외로 허용합니다.)
-        submitBlockedReason = "현재 접수 기간이 아닌 공모전입니다.";
+        if (isContestLocked(ss, entry.contestId)) {
+          submitBlockedReason = "현재 접수 기간이 아닌 공모전입니다.";
+        }
       }
 
       // [보안] 2) 제출자 신원 검증 - Users 시트에 실제 가입된 학생 정보와 일치하는지 확인 (사칭 방지)
@@ -8173,6 +8250,26 @@ function getStartIndex(data, headerText) {
     return 1;
   }
   return 0;
+}
+
+// [헬퍼] 해당 공모전이 잠겨 있는지(접수 마감 상태인지) 확인합니다.
+// Settings 시트의 contest_lock_<공모전ID> 값이 명시적으로 "false"일 때만 접수를 받습니다.
+// 설정이 아예 없으면 안전하게 잠긴 것으로 봅니다.
+function isContestLocked(ss, contestId) {
+  if (!contestId) return true;
+  var sheet = ss.getSheetByName("Settings");
+  if (!sheet) return true;
+
+  var data = sheet.getDataRange().getValues();
+  var startIndex = getStartIndex(data, "Key");
+  var key = "contest_lock_" + contestId;
+  for (var i = startIndex; i < data.length; i++) {
+    if (data[i][0] === key) {
+      var raw = data[i][1];
+      return !(raw === false || String(raw).toLowerCase() === "false");
+    }
+  }
+  return true;
 }
 
 // [헬퍼] Users 시트에 실제로 가입된 계정인지 확인합니다.
