@@ -2641,6 +2641,99 @@ body.light-theme .xp-bar-container {
 }
 
 /* ----------------------------------------------------
+   관리자 - 공모전 접수 열기/닫기
+   ---------------------------------------------------- */
+.admin-lock-section {
+  margin: 10px 16px 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+}
+
+.admin-lock-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.admin-lock-title {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.admin-lock-hint {
+  font-size: 0.68rem;
+  color: #808088;
+}
+
+.admin-lock-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.admin-lock-loading {
+  font-size: 0.7rem;
+  color: #808088;
+}
+
+.admin-lock-chip {
+  font-family: var(--font-body);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #9a9aa4;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.admin-lock-chip:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #fff;
+}
+
+.admin-lock-chip:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.admin-lock-chip:focus-visible {
+  outline: 2px solid #7fbbaf;
+  outline-offset: 2px;
+}
+
+.admin-lock-chip .lock-state {
+  font-size: 0.63rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #808088;
+}
+
+.admin-lock-chip.open {
+  border-color: #10b981;
+  color: #fff;
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.admin-lock-chip.open .lock-state {
+  background: #10b981;
+  color: #04231a;
+}
+
+/* ----------------------------------------------------
    키오스크 모드 (?did=1) - 복도 · 도서관 대형 스크린
    아무도 만지지 않는 화면이므로 조작 UI를 감춥니다.
    (닫기 버튼은 선생님이 종료할 수 있도록 남겨둡니다)
