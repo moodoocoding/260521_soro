@@ -1555,7 +1555,9 @@ async function getLibrarySubmissions(gradeFilter = "all", sortBy = "newest", sea
   return submissions;
 }
 
-async function renderLibraryGallery(gradeFilter = "all") {
+// forceRefresh: 갤러리 탭을 "여는" 순간에는 새로 받아오고,
+// 학년 필터를 바꿀 때는 캐시를 걸러 즉시 보여줍니다.
+async function renderLibraryGallery(gradeFilter = "all", forceRefresh = false) {
   const gridContainer = document.getElementById("gallery-grid-list");
   if (!gridContainer) return;
 
@@ -1573,7 +1575,7 @@ async function renderLibraryGallery(gradeFilter = "all") {
 
   // 작품 목록과 감상 반응을 함께 불러옵니다.
   const [submissions] = await Promise.all([
-    getLibrarySubmissions(gradeFilter, "newest", ""),
+    getLibrarySubmissions(gradeFilter, "newest", "", forceRefresh),
     fetchLibraryReactions()
   ]);
 
@@ -1930,7 +1932,8 @@ async function openDIDExhibition() {
   document.getElementById("did-sort-select").value = "newest";
 
   resetDIDAutoplay();
-  await updateDIDExhibitionContent();
+  // 전시관을 열 때는 그동안 새로 들어온 작품까지 보이도록 항상 새로 받아옵니다.
+  await updateDIDExhibitionContent(true);
 }
 
 function closeDIDExhibition() {
@@ -1949,9 +1952,11 @@ function closeDIDExhibition() {
   resetDIDAutoplay();
 }
 
-async function updateDIDExhibitionContent() {
+// forceRefresh: 전시관을 "여는" 순간에는 항상 서버에서 새로 받아옵니다.
+// 필터·검색·정렬을 바꿀 때는 캐시를 걸러 쓰므로 즉시 반응합니다.
+async function updateDIDExhibitionContent(forceRefresh = false) {
   const [loadedSubmissions] = await Promise.all([
-    getLibrarySubmissions(didCurrentGradeFilter, didCurrentSortBy, didCurrentSearchKeyword),
+    getLibrarySubmissions(didCurrentGradeFilter, didCurrentSortBy, didCurrentSearchKeyword, forceRefresh),
     fetchLibraryReactions()
   ]);
   didSubmissions = loadedSubmissions;
@@ -2303,7 +2308,8 @@ function switchDrawerTab(tabName) {
       } else {
         if (didBtn) didBtn.style.display = "none";
       }
-      renderLibraryGallery("all");
+      // 갤러리 탭을 열 때는 새로 들어온 작품까지 보이도록 새로 받아옵니다.
+      renderLibraryGallery("all", true);
     } else {
       galleryContainer.querySelector(".gallery-title").textContent = "2025년도 출품작 갤러리";
       galleryContainer.querySelector(".gallery-desc").textContent = "작년에 선배들이 실제로 그린 소중한 키링 공모작들입니다. 아래 학년 필터를 통해 자유롭게 감상해 보세요.";
