@@ -616,9 +616,18 @@ function extractDriveId(url) {
   return id.trim();
 }
 
+// 목록·카드용 축소 이미지 (600px). 여러 장을 한 번에 띄우므로 가볍게 받습니다.
 function getGoogleDriveDirectLink(url) {
   const id = extractDriveId(url);
   return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w600` : url;
+}
+
+// 클릭해서 크게 볼 때 쓰는 원본 크기 이미지.
+// 엽서 원본이 800×600이라 sz=w1600을 요청하면 축소 없이 원본이 옵니다.
+// (w600으로 크게 띄우면 600px짜리를 늘리는 셈이라 작고 흐릿하게 보였습니다.)
+function getGoogleDriveFullLink(url) {
+  const id = extractDriveId(url);
+  return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w1600` : url;
 }
 
 const GALLERY_2025_DATA = RAW_2025_KEYRING_DATA.trim().split("\n").map(line => {
@@ -2130,8 +2139,8 @@ function navigateDIDSlide(direction) {
 function startDIDAutoplayInterval() {
   if (didAutoplayInterval) clearInterval(didAutoplayInterval);
 
-  // 복도 스크린(키오스크)에서는 지나가며 읽어야 하므로 더 오래 머무릅니다.
-  const slideDuration = isDidKioskMode ? 8000 : 4000;
+  // 글귀 한 줄과 도서명을 편히 읽을 시간을 줍니다. (예전 4초는 너무 빨랐습니다)
+  const slideDuration = 8000;
 
   didAutoplayInterval = setInterval(() => {
     didCurrentSlideIndex++;
@@ -2494,6 +2503,9 @@ function openContestDetails(contestId) {
 }
 
 window.openImageModal = function(src) {
+  // 카드에 쓰인 축소본(600px) 주소가 넘어와도 원본 크기로 바꿔서 크게 보여줍니다.
+  const fullSrc = src && src.includes("drive.google.com") ? getGoogleDriveFullLink(src) : src;
+
   let modal = document.getElementById("image-fullscreen-modal");
   if (!modal) {
     modal = document.createElement("div");
@@ -2512,8 +2524,11 @@ window.openImageModal = function(src) {
     
     const img = document.createElement("img");
     img.id = "image-fullscreen-img";
-    img.style.maxWidth = "90%";
-    img.style.maxHeight = "90%";
+    // 원본이 800×600이라 max-width만 주면 큰 화면에서 원본 크기 그대로 작게 보입니다.
+    // 화면에 맞춰 키우되 비율은 유지하도록 width/height를 함께 지정합니다.
+    img.style.width = "min(92vw, calc(92dvh * 4 / 3))";
+    img.style.height = "auto";
+    img.style.maxHeight = "92dvh";
     img.style.objectFit = "contain";
     img.style.borderRadius = "8px";
     img.style.boxShadow = "0 10px 30px rgba(0,0,0,0.5)";
@@ -2527,7 +2542,7 @@ window.openImageModal = function(src) {
   }
   
   const img = document.getElementById("image-fullscreen-img");
-  img.src = src;
+  img.src = fullSrc;
   modal.style.display = "flex";
 };
 
