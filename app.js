@@ -826,7 +826,7 @@ async function initKeyringGallery() {
           const studentKey = entry.studentUsername ? entry.studentUsername.toLowerCase() : (entry.studentName ? entry.studentName.toLowerCase() : "");
           if (studentKey) {
             const existing = latestSubmissionsMap.get(studentKey);
-            if (!existing || new Date(entry.timestamp) > new Date(existing.timestamp)) {
+            if (!existing || parseSubmissionTime(entry.timestamp) > parseSubmissionTime(existing.timestamp)) {
               latestSubmissionsMap.set(studentKey, entry);
             }
           } else {
@@ -1517,7 +1517,7 @@ async function fetchLibrarySubmissionsRaw(forceRefresh = false) {
       const studentKey = entry.studentUsername ? entry.studentUsername.toLowerCase() : (entry.studentName ? entry.studentName.toLowerCase() : "");
       if (studentKey) {
         const existing = latestSubmissionsMap.get(studentKey);
-        if (!existing || new Date(entry.timestamp) > new Date(existing.timestamp)) {
+        if (!existing || parseSubmissionTime(entry.timestamp) > parseSubmissionTime(existing.timestamp)) {
           latestSubmissionsMap.set(studentKey, entry);
         }
       } else {
@@ -1559,7 +1559,7 @@ async function getLibrarySubmissions(gradeFilter = "all", sortBy = "newest", sea
   // 항상 최신순으로 정렬합니다.
   // ["인기순" 정렬을 일부러 없앴습니다] 초등학생 대상에서 반응 수로 줄을 세우면
   // 작품 감상이 아니라 인기 투표가 되고, 반응이 적은 학생에게 그대로 드러납니다.
-  submissions.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  submissions.sort((a, b) => parseSubmissionTime(b.timestamp) - parseSubmissionTime(a.timestamp));
 
   return submissions;
 }
@@ -1666,6 +1666,30 @@ async function renderLibraryGallery(gradeFilter = "all", forceRefresh = false) {
     if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
     pendingScrollToSubmissionId = null;
   }
+}
+
+// 제출 시각은 `new Date().toLocaleString("ko-KR")`로 저장돼서
+// "2026. 8. 19. 오후 2:02:00" 같은 한국어 문자열입니다.
+// 이 문자열은 new Date()가 파싱하지 못해 Invalid Date가 됩니다.
+// 그동안 최신순 정렬과 "학생당 최신 1건" 판정이 전부 NaN 비교라
+// 사실상 동작하지 않았습니다. 직접 해석해서 비교 가능한 숫자로 만듭니다.
+function parseSubmissionTime(value) {
+  if (!value) return 0;
+
+  const m = String(value).match(
+    /(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.?\s*(오전|오후)?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?/
+  );
+  if (m) {
+    const [, y, mo, d, ampm, hh, mi, ss] = m;
+    let hour = parseInt(hh, 10);
+    if (ampm === "오후" && hour < 12) hour += 12;
+    if (ampm === "오전" && hour === 12) hour = 0;
+    return new Date(+y, +mo - 1, +d, hour, +mi, +(ss || 0)).getTime();
+  }
+
+  // ISO 등 표준 형식으로 저장된 값도 대비합니다.
+  const parsed = new Date(value).getTime();
+  return isNaN(parsed) ? 0 : parsed;
 }
 
 // 학생이 입력한 글귀·도서명을 화면에 넣기 전에 안전하게 변환합니다.
