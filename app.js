@@ -5,6 +5,53 @@
 const SECURE_API_ENCODED = "aHR0cHM6Ly9zY3JpcHQuZ29vZ2xlLmNvbS9tYWNyb3Mvcy9BS2Z5Y2J4OGpvNzZtSmt4U2o1dWIteXN4U1VGaE9HSV9VM3kyRG4tdzRYa3JISXg5U05pbWV0a0V0WGN2aGZjZ3FTdFlzUHovZXhlYw==";
 const GOOGLE_SHEET_API_URL = atob(SECURE_API_ENCODED);
 
+// ====================================================
+// 백엔드 전환 지점
+//
+// 모든 서버 호출이 callBackend() 한 곳을 지나갑니다.
+// 기본값은 지금까지 쓰던 Apps Script 이고, Firestore 로 바꾸려면
+// 주소 뒤에 ?backend=firebase 를 붙이면 됩니다.
+//
+// 이렇게 둔 이유: 도서관 공모전이 진행 중이라 운영에 영향을 주면 안 되고,
+// 5단계에서 한 학급만 새 백엔드로 시험해 볼 수 있어야 하기 때문입니다.
+// ====================================================
+const BACKEND_MODE = (() => {
+  try {
+    const q = new URLSearchParams(window.location.search).get("backend");
+    if (q === "firebase" || q === "sheets") {
+      localStorage.setItem("soro_backend", q);   // 새로고침해도 유지
+      return q;
+    }
+    return localStorage.getItem("soro_backend") || "sheets";
+  } catch (e) {
+    return "sheets";
+  }
+})();
+
+async function callBackend(payload) {
+  if (BACKEND_MODE === "firebase") {
+    if (!window.soroFirebase) {
+      console.error("Firebase 백엔드가 아직 준비되지 않았습니다.");
+      return { status: "error", message: "백엔드를 불러오지 못했습니다." };
+    }
+    return await window.soroFirebase.call(payload);
+  }
+
+  // 밑줄로 시작하는 항목은 Firebase 전용이므로 Apps Script 로는 보내지 않습니다.
+  // (특히 _rawPassword — 평문 비밀번호가 네트워크로 나가지 않도록)
+  const forSheets = {};
+  for (const [k, v] of Object.entries(payload)) {
+    if (!k.startsWith("_")) forSheets[k] = v;
+  }
+
+  const response = await fetch(GOOGLE_SHEET_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: JSON.stringify(forSheets)
+  });
+  return await response.json();
+}
+
 // contestLocks global object and fetch function
 let contestLocks = {};
 
@@ -15,12 +62,7 @@ let adminSelectedZepRound = "zepquiz_3"; // Selected round in admin dashboard vi
 async function fetchContestLocks() {
   if (!GOOGLE_SHEET_API_URL) return;
   try {
-    const response = await fetch(GOOGLE_SHEET_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: JSON.stringify({ action: "getContestLocks" })
-    });
-    const result = await response.json();
+    const result = await callBackend({ action: "getContestLocks" });
     if (result.status === "success") {
       contestLocks = result.data || {};
       if (result.activeRound) {
@@ -809,15 +851,10 @@ async function initKeyringGallery() {
   // 1. 구글 스프레드시트 API를 통해 2026년 실시간 키링 공모작 목록 조회
   if (GOOGLE_SHEET_API_URL) {
     try {
-      const response = await fetch(GOOGLE_SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify({
+      const result = await callBackend({
           action: "getAllSubmissions",
           contestId: "keyring"
-        })
-      });
-      const result = await response.json();
+        });
       if (result.status === "success" && Array.isArray(result.data)) {
         // 중복 제거용 임시 맵 (학생당 가장 최근 1개 작품만 노출)
         const latestSubmissionsMap = new Map();
@@ -1061,18 +1098,14 @@ async function handleSignUp(grade, classNum, number, name, password) {
     classNum: classNum,
     number: number,
     name: name,
-    password: hashedPassword // 암호화된 패스워드 전송
+    password: hashedPassword, // 암호화된 패스워드 전송
+    _rawPassword: password    // Firebase Auth 는 원문이 필요합니다 (Apps Script 로는 전송 안 됨)
   };
 
   if (GOOGLE_SHEET_API_URL) {
     showToast("클라우드 서버에 등록하고 있습니다...", "info");
     try {
-      const response = await fetch(GOOGLE_SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify(payload)
-      });
-      const result = await response.json();
+      const result = await callBackend(payload);
 
       if (result.status === "error") {
         showToast(result.message, "error");
@@ -1116,12 +1149,7 @@ async function handleResetPassword(grade, classNum, number, name, newPassword) {
   if (GOOGLE_SHEET_API_URL) {
     showToast("보안 서버에 비밀번호 초기화를 요청 중...", "info");
     try {
-      const response = await fetch(GOOGLE_SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify(payload)
-      });
-      const result = await response.json();
+      const result = await callBackend(payload);
 
       if (result.status === "error") {
         showToast(result.message, "error");
@@ -1163,7 +1191,10 @@ async function handleLogin(grade, classNum, number, name, password) {
     let payload = {
       action: "login",
       userKey: userKey,
-      password: hashedPassword
+      password: hashedPassword,
+      // Firebase Auth 는 해시가 아니라 원문 비밀번호로 인증합니다.
+      // 밑줄로 시작하는 항목은 Apps Script 로는 전송되지 않습니다(callBackend 에서 제거).
+      _rawPassword: password
     };
 
     try {
@@ -1171,12 +1202,7 @@ async function handleLogin(grade, classNum, number, name, password) {
       // 예전 평문 비밀번호 계정의 확인과 해시 전환은 서버가 같은 요청 안에서 처리합니다.
       // (예전에는 "해시 시도 → 평문 재시도 → 해시로 재가입" 3번을 왕복해서
       //  Apps Script 특성상 왕복당 3초씩, 로그인이 10초 가까이 걸렸습니다.)
-      const response = await fetch(GOOGLE_SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify(payload)
-      });
-      const result = await response.json();
+      const result = await callBackend(payload);
 
       if (result.status === "error") {
         showToast("학년/반/번호/이름 또는 비밀번호가 일치하지 않습니다.", "error");
@@ -1438,12 +1464,7 @@ async function getMySubmissions(forceRefresh = false) {
   const ownerKey = currentUser.userKey;
   _mySubmissionsPromise = (async () => {
     try {
-      const response = await fetch(GOOGLE_SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify({ action: "getSubmissions", studentUsername: ownerKey })
-      });
-      const result = await response.json();
+      const result = await callBackend({ action: "getSubmissions", studentUsername: ownerKey });
       if (result.status === "success" && Array.isArray(result.data)) {
         _mySubmissionsCache = result.data;
         _mySubmissionsCacheKey = ownerKey;
@@ -1483,12 +1504,7 @@ async function fetchLibrarySubmissionsRaw(forceRefresh = false) {
 
     if (GOOGLE_SHEET_API_URL) {
       try {
-        const response = await fetch(GOOGLE_SHEET_API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: JSON.stringify({ action: "getAllSubmissions", contestId: "library" })
-        });
-        const result = await response.json();
+        const result = await callBackend({ action: "getAllSubmissions", contestId: "library" });
         if (result.status === "success" && Array.isArray(result.data)) {
           submissions = result.data;
         }
@@ -1723,16 +1739,11 @@ let pendingScrollToSubmissionId = null;
 async function fetchLibraryReactions() {
   if (!GOOGLE_SHEET_API_URL) return;
   try {
-    const response = await fetch(GOOGLE_SHEET_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: JSON.stringify({
+    const result = await callBackend({
         action: "getReactions",
         contestId: "library",
         studentUsername: currentUser ? currentUser.userKey : ""
-      })
-    });
-    const result = await response.json();
+      });
     if (result.status === "success") {
       libraryReactions = { counts: result.counts || {}, mine: result.mine || {} };
     }
@@ -1803,17 +1814,12 @@ window.toggleReaction = async function (submissionId, type, btn) {
   if (optimisticReacted && btn) createFloatingHeart(btn);
 
   try {
-    const response = await fetch(GOOGLE_SHEET_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: JSON.stringify({
+    const result = await callBackend({
         action: "toggleReaction",
         submissionId: submissionId,
         studentUsername: currentUser.userKey,
         reactionType: type
-      })
-    });
-    const result = await response.json();
+      });
 
     if (result.status === "success") {
       // 서버가 알려준 실제 값으로 맞춥니다 (다른 학생이 그 사이 누른 것도 반영됨).
@@ -2780,12 +2786,7 @@ window.cancelSubmissionInDrawer = async function (entryId) {
         studentUsername: currentUser.userKey
       };
       try {
-        const response = await fetch(GOOGLE_SHEET_API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: JSON.stringify(payload)
-        });
-        const result = await response.json();
+        const result = await callBackend(payload);
 
         if (result.status === "error") {
           showToast(result.message, "error");
@@ -4698,11 +4699,7 @@ function initPixelArtEditor() {
         };
 
         try {
-          await fetch(GOOGLE_SHEET_API_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: JSON.stringify(delPayload)
-          });
+          await callBackend(delPayload);
 
           // save new draft
           const newDraftEntry = {
@@ -4726,12 +4723,7 @@ function initPixelArtEditor() {
             entry: newDraftEntry
           };
 
-          const response = await fetch(GOOGLE_SHEET_API_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: JSON.stringify(savePayload)
-          });
-          const result = await response.json();
+          const result = await callBackend(savePayload);
           if (result.status === "success") {
             showToast("픽셀아트 작업 내역이 클라우드에 보관 완료되었습니다! ☁️💾", "success");
             setTimeout(() => {
@@ -5280,12 +5272,7 @@ async function executeSubmit() {
       entry: newEntry
     };
     try {
-      const response = await fetch(GOOGLE_SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify(payload)
-      });
-      const result = await response.json();
+      const result = await callBackend(payload);
 
       if (result.status === "error") {
         showToast(result.message, "error");
@@ -5593,12 +5580,7 @@ window.confirmDeleteEntry = async function (entryId) {
         studentUsername: currentUser.userKey
       };
       try {
-        const response = await fetch(GOOGLE_SHEET_API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: JSON.stringify(payload)
-        });
-        const result = await response.json();
+        const result = await callBackend(payload);
 
         if (result.status === "error") {
           showToast(result.message, "error");
@@ -6082,12 +6064,7 @@ async function fetchAndRenderAdminData() {
     // Step 1: 선제적 1회 일괄 조회 (Bulk Fetch) 시도
     try {
       console.log("[Bulk Fetch] Requesting all contest data...");
-      const response = await fetch(GOOGLE_SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify({ action: "getAllSubmissions", contestId: "all", adminToken: getAdminToken() })
-      });
-      const result = await response.json();
+      const result = await callBackend({ action: "getAllSubmissions", contestId: "all", adminToken: getAdminToken() });
       if (result.status === "success" && Array.isArray(result.data)) {
         // ZepQuiz 관련 데이터 배제 필터링 적용
         adminAllSubmissions = result.data.filter(entry => entry && entry.contestId && !entry.contestId.startsWith("zepquiz"));
@@ -6103,12 +6080,7 @@ async function fetchAndRenderAdminData() {
       console.log("[Fallback] Requesting parallel individual queries for 6 contests...");
       const fetchPromises = activeContestIds.map(async (cId) => {
         try {
-          const response = await fetch(GOOGLE_SHEET_API_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: JSON.stringify({ action: "getAllSubmissions", contestId: cId, adminToken: getAdminToken() })
-          });
-          const result = await response.json();
+          const result = await callBackend({ action: "getAllSubmissions", contestId: cId, adminToken: getAdminToken() });
           if (result.status === "success" && Array.isArray(result.data)) {
             return result.data.map(d => ({ ...d, contestId: cId }));
           }
@@ -6381,17 +6353,12 @@ window.toggleAdminStar = async function(submissionId) {
 
   if (GOOGLE_SHEET_API_URL) {
     try {
-      const response = await fetch(GOOGLE_SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify({
+      const result = await callBackend({
           action: "updateSubmissionStarStatus",
           id: submissionId,
           isStarred: nextStarred,
           adminToken: getAdminToken()
-        })
-      });
-      const result = await response.json();
+        });
       if (result.status === "success") {
         entry.data.isStarred = nextStarred;
         showToast("별표 상태가 업데이트되었습니다.", "success");
@@ -6435,12 +6402,7 @@ window.toggleAdminPrize = async function(submissionId) {
       adminToken: getAdminToken()
     };
     try {
-      const response = await fetch(GOOGLE_SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify(payload)
-      });
-      const result = await response.json();
+      const result = await callBackend(payload);
       if (result.status === "success") {
         entry.data.prizeStatus = currentStatus;
         showToast("사은품 지급 상태가 업데이트되었습니다.", "success");
@@ -6606,12 +6568,7 @@ window.deleteSubmissionByAdmin = async function(id, contestId) {
 
   if (GOOGLE_SHEET_API_URL) {
     try {
-      const response = await fetch(GOOGLE_SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify({ action: "deleteSubmission", id: id, adminToken: getAdminToken() })
-      });
-      const result = await response.json();
+      const result = await callBackend({ action: "deleteSubmission", id: id, adminToken: getAdminToken() });
 
       if (result.status === "error") {
         showToast(result.message, "error");
@@ -6700,17 +6657,12 @@ window.toggleContestLock = async function (contestId) {
   if (chip) chip.disabled = true;
 
   try {
-    const response = await fetch(GOOGLE_SHEET_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: JSON.stringify({
+    const result = await callBackend({
         action: "updateContestLock",
         contestId: contestId,
         isLocked: nextLocked,
         adminToken: getAdminToken()
-      })
-    });
-    const result = await response.json();
+      });
 
     if (result.status === "success") {
       contestLocks[contestId] = nextLocked;
@@ -6834,16 +6786,11 @@ window.setAsActiveZepRound = async function() {
   
   if (GOOGLE_SHEET_API_URL) {
     try {
-      const response = await fetch(GOOGLE_SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify({
+      const result = await callBackend({
           action: "updateActiveZepRound",
           activeRound: roundNum,
           adminToken: getAdminToken()
-        })
-      });
-      const result = await response.json();
+        });
       if (result.status === "success") {
         currentActiveZepRound = roundNum.toString();
         
@@ -6899,13 +6846,7 @@ async function fetchZepQuizDataAndRender() {
   }
 
   try {
-    const response = await fetch(GOOGLE_SHEET_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: JSON.stringify({ action: "getZepQuizStats", roundId: adminSelectedZepRound, adminToken: getAdminToken() })
-    });
-
-    const result = await response.json();
+    const result = await callBackend({ action: "getZepQuizStats", roundId: adminSelectedZepRound, adminToken: getAdminToken() });
 
     // 이 요청이 시작된 이후 더 최신 회차 조회가 시작됐다면, 이 응답은 이미 낡은 것이므로 무시합니다.
     if (requestToken !== zepQuizFetchRequestToken) return;
@@ -7201,12 +7142,7 @@ window.deleteZepSubmissionByAdmin = async function(submissionId, studentName, gr
 
   if (GOOGLE_SHEET_API_URL) {
     try {
-      const response = await fetch(GOOGLE_SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify({ action: "deleteSubmission", id: submissionId, adminToken: getAdminToken() })
-      });
-      const result = await response.json();
+      const result = await callBackend({ action: "deleteSubmission", id: submissionId, adminToken: getAdminToken() });
 
       if (result.status === "error") {
         showToast(result.message, "error");
@@ -7237,12 +7173,7 @@ window.deleteZepUserByAdmin = async function(userKey, studentName, grade, classN
   
   if (GOOGLE_SHEET_API_URL) {
     try {
-      const response = await fetch(GOOGLE_SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify({ action: "deleteUser", userKey: userKey, adminToken: getAdminToken() })
-      });
-      const result = await response.json();
+      const result = await callBackend({ action: "deleteUser", userKey: userKey, adminToken: getAdminToken() });
       
       if (result.status === "error") {
         showToast(result.message, "error");
@@ -7294,19 +7225,13 @@ window.toggleZepClassCookie = async function(grade, classNum) {
   
   if (GOOGLE_SHEET_API_URL) {
     try {
-      const response = await fetch(GOOGLE_SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify({
+      const result = await callBackend({
           action: "updateClassPrizeStatus",
           roundId: adminSelectedZepRound,
           classKey: classKey,
           prizeStatus: nextStatus,
           adminToken: getAdminToken()
-        })
-      });
-      
-      const result = await response.json();
+        });
       if (result.status === "success") {
         cls.prizeStatus = nextStatus;
         showToast(`${grade}학년 ${classNum}반 과자 지급 상태가 업데이트되었습니다.`, "success");
@@ -7346,17 +7271,12 @@ window.editClassStudentCount = async function(grade, classNum, currentCount) {
   
   if (GOOGLE_SHEET_API_URL) {
     try {
-      const response = await fetch(GOOGLE_SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify({
+      const result = await callBackend({
           action: "updateClassStudentCount",
           classKey: `${grade}-${classNum}`,
           studentCount: newCount,
           adminToken: getAdminToken()
-        })
-      });
-      const result = await response.json();
+        });
       if (result.status === "success") {
         showToast(`${grade}학년 ${classNum}반 인원이 ${newCount}명으로 수정되었습니다.`, "success");
         fetchZepQuizDataAndRender();
