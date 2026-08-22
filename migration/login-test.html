@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Firebase 비밀번호 이전 검증</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0; min-height: 100dvh; display: grid; place-items: center;
+    background: #0f1315; color: #e7ecea; padding: 24px;
+    font-family: -apple-system, "Apple SD Gothic Neo", system-ui, sans-serif;
+    line-height: 1.7;
+  }
+  .card {
+    width: 100%; max-width: 520px;
+    border: 1px solid rgba(231,236,234,.18); background: #161c1e; padding: 28px;
+  }
+  h1 { font-size: 1.15rem; margin: 0 0 6px; }
+  .sub { color: #9ba5a6; font-size: .88rem; margin: 0 0 22px; }
+  label { display: block; font-size: .76rem; font-weight: 700; color: #9ba5a6; margin: 14px 0 5px; letter-spacing: .04em; }
+  input {
+    width: 100%; padding: 10px 12px; font-size: .95rem; font-family: ui-monospace, Menlo, monospace;
+    background: #0f1315; color: #e7ecea; border: 1px solid rgba(231,236,234,.2);
+  }
+  input:focus { outline: 2px solid #7fbbaf; outline-offset: 1px; }
+  button {
+    width: 100%; margin-top: 20px; padding: 12px; font-size: .95rem; font-weight: 800;
+    font-family: inherit; background: #7fbbaf; color: #08211d; border: none; cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: progress; }
+  .result { margin-top: 20px; padding: 16px; font-size: .92rem; display: none; white-space: pre-wrap; }
+  .result.ok { display: block; background: rgba(127,187,175,.14); border: 1px solid #7fbbaf; }
+  .result.ng { display: block; background: rgba(219,131,113,.14); border: 1px solid #db8371; }
+  .hint { margin-top: 18px; font-size: .8rem; color: #677173; }
+  code { background: rgba(231,236,234,.1); padding: 1px 5px; font-size: .85em; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>기존 비밀번호로 로그인되는가</h1>
+  <p class="sub">
+    가져온 시험 계정이 <b>원래 쓰던 비밀번호</b>로 로그인되는지 확인합니다.
+    성공하면 학생 300명의 비밀번호를 그대로 옮길 수 있다는 뜻입니다.
+  </p>
+
+  <label for="cfg">firebaseConfig (콘솔 → 프로젝트 설정 → 내 앱)</label>
+  <input id="cfg" placeholder='{"apiKey":"...","authDomain":"...","projectId":"..."}'>
+
+  <label for="email">이메일 (make-import-file.js 가 알려준 값)</label>
+  <input id="email" placeholder="u30ec1130...@soro.local">
+
+  <label for="pw">비밀번호</label>
+  <input id="pw" type="text" value="soro-test-1234">
+
+  <button id="go">로그인 시도</button>
+  <div class="result" id="out"></div>
+
+  <p class="hint">
+    비밀번호를 <code>type="text"</code>로 둔 건 시험용 가짜 계정이라 눈으로 확인하기 위해서입니다.
+    실제 학생 비밀번호는 절대 여기에 입력하지 마세요.
+  </p>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+  const $ = id => document.getElementById(id);
+  const out = $("out");
+
+  $("go").addEventListener("click", async () => {
+    out.className = "result";
+    $("go").disabled = true;
+
+    try {
+      const cfg = JSON.parse($("cfg").value.trim());
+      const auth = getAuth(initializeApp(cfg));
+      const cred = await signInWithEmailAndPassword(auth, $("email").value.trim(), $("pw").value);
+
+      out.className = "result ok";
+      out.textContent =
+        "✅ 로그인 성공\n\n" +
+        "기존 SHA-256 해시를 Firebase Auth가 그대로 받아들였습니다.\n" +
+        "학생들이 지금 쓰는 비밀번호를 그대로 옮길 수 있습니다.\n\n" +
+        "uid: " + cred.user.uid + "\n\n" +
+        "→ 2단계(Firestore 구조·보안 규칙 설계)로 진행하면 됩니다.";
+    } catch (e) {
+      out.className = "result ng";
+      const code = e && e.code ? e.code : "";
+      let advice = "";
+
+      if (code === "auth/invalid-credential" || code === "auth/wrong-password") {
+        advice =
+          "해시는 업로드됐지만 비밀번호가 맞지 않는 것으로 나옵니다.\n" +
+          "→ --rounds 값을 0 또는 다른 값으로 바꿔 다시 가져와 보세요.\n" +
+          "→ 그래도 안 되면 '전원 비밀번호 재설정'을 전제로 계획을 수정해야 합니다.";
+      } else if (code === "auth/user-not-found") {
+        advice = "가져오기가 안 된 것 같습니다. auth:import 명령이 성공했는지, 프로젝트ID가 맞는지 확인하세요.";
+      } else if (code === "auth/invalid-email") {
+        advice = "이메일 형식이 잘못됐습니다. make-import-file.js 가 출력한 값을 그대로 붙여넣으세요.";
+      } else if (code === "auth/operation-not-allowed") {
+        advice = "콘솔에서 Authentication → 이메일/비밀번호 로그인을 켜야 합니다.";
+      } else {
+        advice = "설정값(firebaseConfig)이 올바른 JSON인지 확인해 보세요.";
+      }
+
+      out.textContent = "❌ 로그인 실패\n\n" + (code || e) + "\n\n" + advice;
+    } finally {
+      $("go").disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
