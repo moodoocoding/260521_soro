@@ -31,12 +31,16 @@ Firebase Auth는 기존 해시를 가져오는 기능을 제공하지만, **우�
 
 만든 뒤 **빌드 → Authentication → 시작하기 → 이메일/비밀번호 사용 설정**을 켭니다.
 
-### 2. Firebase CLI 설치 및 로그인
+### 2. Firebase 로그인
+
+CLI는 **설치 없이 `npx`로** 씁니다 (전역 설치는 관리자 권한이 필요해서 막힙니다).
 
 ```bash
-npm install -g firebase-tools
-firebase login
+npx --yes firebase-tools@latest login
 ```
+
+브라우저가 열리면 **구글 계정으로 로그인**합니다.
+이 단계는 계정 인증이라 **반드시 본인이 직접** 해야 합니다.
 
 ### 3. 가져오기 파일 생성
 
@@ -51,11 +55,19 @@ node make-import-file.js --test > test-users.json
 `<프로젝트ID>` 를 1번에서 만든 프로젝트 ID로 바꿔서 실행합니다.
 
 ```bash
-firebase auth:import test-users.json --hash-algo=SHA256 --rounds=1 --project <프로젝트ID>
+npx --yes firebase-tools@latest auth:import test-users.json \
+  --hash-algo=SHA256 \
+  --rounds=1 \
+  --hash-input-order=PASSWORD_FIRST \
+  --project <프로젝트ID>
 ```
 
 `Processed 1 user` 같은 메시지가 나오면 업로드는 성공입니다.
 **단, 이건 "파일을 받았다"는 뜻이지 "비밀번호가 맞다"는 뜻이 아닙니다.** 5번이 진짜 검증입니다.
+
+> **`--hash-input-order` 를 빠뜨리지 마세요.** SHA 계열은 해시를 `SHA(비밀번호+솔트)`로 볼지
+> `SHA(솔트+비밀번호)`로 볼지 이 플래그로 정합니다. 지정하지 않으면 로그인이 실패할 수 있습니다.
+> 우리는 솔트를 쓰지 않아 둘 중 어느 쪽이든 결과가 같지만, 플래그 자체는 넣어야 합니다.
 
 ### 5. 실제로 로그인되는지 확인 ← **이게 핵심**
 

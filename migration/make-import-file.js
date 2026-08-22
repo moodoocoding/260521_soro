@@ -26,12 +26,13 @@ function userKeyToEmail(userKey) {
 }
 
 function buildUser(userKey, passwordHashHex) {
+  // 솔트를 쓰지 않으므로 salt 필드는 아예 넣지 않습니다.
+  // (빈 문자열로 넣으면 Firebase가 다르게 해석할 여지가 있습니다)
   return {
     localId: crypto.createHash("sha1").update(userKey).digest("hex").slice(0, 28),
     email: userKeyToEmail(userKey),
     emailVerified: true,
-    passwordHash: hexToBase64(passwordHashHex),
-    salt: "" // 우리 해시는 솔트를 쓰지 않습니다
+    passwordHash: hexToBase64(passwordHashHex)
   };
 }
 
