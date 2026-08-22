@@ -36,6 +36,13 @@ const del   = async (p,t)   => (await fetch(`${BASE}/${p}`,{method:"DELETE",head
 const rows=[];
 const check=(n,got,want)=>rows.push({시험:n,결과:got?"허용":"거부",기대:want?"허용":"거부",판정:got===want?"✅":"❌"});
 
+// 도서관 공모전이 지금 열려 있는지 먼저 읽습니다.
+// 이전된 실제 설정을 그대로 쓰므로, 잠겨 있으면 "제출 거부"가 정상입니다.
+const lockRes = await fetch(`${BASE}/settings/contest_lock_library`);
+const lockJson = lockRes.ok ? await lockRes.json() : null;
+const libraryOpen = lockJson?.fields?.value?.booleanValue === false;
+console.log(`도서관 공모전 상태: ${libraryOpen ? "접수 중" : "마감"} — 이에 맞춰 기대값을 정합니다\n`);
+
 const A = await signIn("u6912bc044c36706a9f08c685@soro.local","pw-student-a");
 const B = await signIn("u240ce1ee815bc2b33a4d3a1a@soro.local","pw-student-b");
 
@@ -44,10 +51,11 @@ const entry = uid => ({ uid, contestId:"library", contestTitle:"온라인 도서
   timestamp:"2026-08-22", data:{ image:"https://drive.google.com/x", "book-title":"어린 왕자" } });
 
 // ── 정상 동작 ──
-check("A가 열린 공모전에 본인 제출", await write(`submissions/library__${A.uid}`, entry(A.uid), A.token), true);
-check("A가 자기 제출을 수정(재제출)", await write(`submissions/library__${A.uid}`, {...entry(A.uid), timestamp:"2026-08-23"}, A.token), true);
-check("B가 A 작품에 반응", await write(`reactions/library__${A.uid}__${B.uid}__heart`, {submissionId:`library__${A.uid}`, uid:B.uid, type:"heart"}, B.token), true);
-check("B가 자기 반응 취소", await del(`reactions/library__${A.uid}__${B.uid}__heart`, B.token), true);
+check(`A가 본인 제출 (도서관 ${libraryOpen ? "접수중" : "마감"})`, await write(`submissions/library__${A.uid}`, entry(A.uid), A.token), libraryOpen);
+check(`A가 자기 제출 수정 (도서관 ${libraryOpen ? "접수중" : "마감"})`, await write(`submissions/library__${A.uid}`, {...entry(A.uid), timestamp:"2026-08-23"}, A.token), libraryOpen);
+const targetSub = `library__${A.uid}`;
+check("B가 A 작품에 반응", await write(`reactions/${targetSub}__${B.uid}__heart`, {submissionId:targetSub, uid:B.uid, type:"heart"}, B.token), true);
+check("B가 자기 반응 취소", await del(`reactions/${targetSub}__${B.uid}__heart`, B.token), true);
 
 // ── 차단되어야 하는 것 ──
 check("A가 자기 작품에 반응", await write(`reactions/library__${A.uid}__${A.uid}__heart`, {submissionId:`library__${A.uid}`, uid:A.uid, type:"heart"}, A.token), false);
