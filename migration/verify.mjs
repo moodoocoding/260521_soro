@@ -46,5 +46,20 @@ for (const s of sample) {
 }
 
 // 한 학생이 한 공모전에 하나뿐인지
+// 반응 검증
+const expectedRx = JSON.parse(readFileSync("build/firestore-reactions.json","utf8"));
+const gotRx = await countAll("reactions", false);
+console.log(`\n반응   : 기대 ${expectedRx.length} / 실제 ${gotRx}  ${gotRx===expectedRx.length?"✅":"❌"}`);
+
+// 반응이 실제 존재하는 제출물을 가리키는지
+const subIds = new Set(expectedSubs.map(s => s._id));
+const dangling = expectedRx.filter(r => !subIds.has(r.submissionId)).length;
+console.log(`끊어진 반응: ${dangling}건 ${dangling===0?"✅":"❌"}`);
+
+// 자기 작품 반응이 남아있지 않은지
+const owner = new Map(expectedSubs.map(s => [s._id, s.uid]));
+const self = expectedRx.filter(r => owner.get(r.submissionId) === r.uid).length;
+console.log(`자기 작품 반응: ${self}건 ${self===0?"✅":"❌"}`);
+
 const ids = new Set(expectedSubs.map(s => s._id));
 console.log(`\n문서 ID 중복 없음: ${ids.size === expectedSubs.length ? "✅" : "❌"} (${ids.size}/${expectedSubs.length})`);

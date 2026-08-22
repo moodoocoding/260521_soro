@@ -66,7 +66,13 @@ check("B가 A 이름으로 반응 위조", await write(`reactions/library__${A.u
 check("A가 허용되지 않은 반응 종류 사용", await write(`reactions/library__${A.uid}__${B.uid}__evil`, {submissionId:`library__${A.uid}`, uid:B.uid, type:"evil"}, B.token), false);
 
 // ── 정리 ──
+// 규칙 전파가 늦어 "거부 기대"였던 쓰기가 통과해버리는 경우가 있어,
+// 시험이 만들었을 수 있는 문서를 전부 지우고 끝냅니다.
 await del(`submissions/library__${A.uid}`, A.token);
+await del(`submissions/keyring__${A.uid}`, A.token);
+for (const [t, who] of [["heart", B], ["art", B], ["evil", B], ["heart", A]]) {
+  await del(`reactions/${targetSub}__${who.uid}__${t}`, who.token);
+}
 
 const pass = rows.filter(r=>r.판정==="✅").length;
 console.table(rows);
