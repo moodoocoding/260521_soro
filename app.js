@@ -17,14 +17,19 @@ const GOOGLE_SHEET_API_URL = atob(SECURE_API_ENCODED);
 // ====================================================
 const BACKEND_MODE = (() => {
   try {
+    // 예전 시험 과정에서 localStorage 에 고정해둔 값이 남아 있으면 지웁니다.
+    // 그대로 두면 그 브라우저만 옛 백엔드에 계속 쓰게 되어 데이터가 두 곳으로 갈라집니다.
+    localStorage.removeItem("soro_backend");
+
     const q = new URLSearchParams(window.location.search).get("backend");
     if (q === "firebase" || q === "sheets") {
-      localStorage.setItem("soro_backend", q);   // 새로고침해도 유지
+      // 되돌리기 시험용 임시 전환입니다. 탭을 닫으면 사라지도록 sessionStorage 를 씁니다.
+      sessionStorage.setItem("soro_backend", q);
       return q;
     }
-    return localStorage.getItem("soro_backend") || "sheets";
+    return sessionStorage.getItem("soro_backend") || "firebase";
   } catch (e) {
-    return "sheets";
+    return "firebase";
   }
 })();
 
