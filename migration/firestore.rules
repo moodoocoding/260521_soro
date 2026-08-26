@@ -23,10 +23,17 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // 관리자는 하드코딩된 학번이 아니라 Auth 커스텀 클레임으로 판별합니다.
+    // 관리자는 하드코딩된 학번이 아니라 users/{uid} 문서의 admin 값으로 판별합니다.
     // (예전: 5학년 1반 27번 김태호인지 값 비교 → 위조 가능)
+    //
+    // 커스텀 클레임(request.auth.token.admin) 대신 문서를 읽는 이유:
+    // 클레임을 붙이려면 서비스 계정 키가 필요한데, 학교 운영 환경에서 그 키를
+    // 관리하는 부담이 큽니다. 문서 방식은 키 없이도 되고, 아래 users 규칙이
+    // "학생은 자기 문서에 admin 을 붙일 수 없다"를 강제하므로 안전합니다.
     function isAdmin() {
-      return isSignedIn() && request.auth.token.admin == true;
+      return isSignedIn()
+             && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+             && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.admin == true;
     }
 
     function isOwner(uid) {
@@ -64,8 +71,13 @@ service cloud.firestore {
     // 비밀번호는 Firebase Auth가 관리하므로 여기엔 없습니다.
 
     match /users/{uid} {
-      // 갤러리에서 이름을 보여줘야 하므로 로그인한 사용자는 읽을 수 있습니다.
-      allow read: if isSignedIn();
+      // 본인 프로필과 관리자만 읽을 수 있습니다.
+      //
+      // 처음에는 "로그인한 사용자 누구나"로 열어뒀는데, 그러면 학생도 전교생 명단과
+      // 학급별 참여 통계를 그대로 읽을 수 있었습니다. 기존 백엔드는 이 조회에
+      // 관리자 토큰을 요구했으므로 그 수준으로 되돌립니다.
+      // 갤러리는 제출물에 복사해둔 이름을 쓰므로 이 제한의 영향을 받지 않습니다.
+      allow read: if isOwner(uid) || isAdmin();
 
       // 가입: 자기 문서만, 그리고 uid가 본인이어야 합니다.
       allow create: if isOwner(uid)
@@ -125,9 +137,13 @@ service cloud.firestore {
                     && reactionId == request.resource.data.submissionId
                                      + '__' + request.auth.uid
                                      + '__' + request.resource.data.type
-                    && request.resource.data.type in ['read', 'art', 'heart']
-                    // 자기 작품에는 반응할 수 없습니다.
-                    && !request.resource.data.submissionId.matches('.*__' + request.auth.uid + '$');
+                    && request.resource.data.type in ['read', 'art', 'heart'];
+                    // [자기 작품 반응을 막지 않습니다]
+                    // 처음에는 막도록 설계했지만, 실제 데이터에서 전체 반응의 16%(93건 중 15건)가
+                    // 자기 작품에 남긴 것이었습니다. 초등학생이 방금 만든 자기 엽서에 하트를 누르는 건
+                    // 자연스러운 행동이고, 막으면 그 기록이 그대로 사라집니다.
+                    // 순위 정렬을 없앴기 때문에 "자기 점수 올리기" 문제도 크지 않습니다.
+                    // 나중에 막기로 하면 규칙 한 줄로 되돌릴 수 있지만, 지금 버린 기록은 복구할 수 없습니다.
 
       // 반응은 수정하지 않고 누르거나(생성) 취소(삭제)만 합니다.
       allow update: if false;

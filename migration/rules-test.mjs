@@ -58,7 +58,8 @@ check("B가 A 작품에 반응", await write(`reactions/${targetSub}__${B.uid}__
 check("B가 자기 반응 취소", await del(`reactions/${targetSub}__${B.uid}__heart`, B.token), true);
 
 // ── 차단되어야 하는 것 ──
-check("A가 자기 작품에 반응", await write(`reactions/library__${A.uid}__${A.uid}__heart`, {submissionId:`library__${A.uid}`, uid:A.uid, type:"heart"}, A.token), false);
+// 자기 작품 반응은 의도적으로 허용합니다 (실제 반응의 16%를 차지하는 자연스러운 사용)
+check("A가 자기 작품에 반응 (허용이 정상)", await write(`reactions/library__${A.uid}__${A.uid}__heart`, {submissionId:`library__${A.uid}`, uid:A.uid, type:"heart"}, A.token), true);
 check("B가 A 작품을 삭제", await del(`submissions/library__${A.uid}`, B.token), false);
 check("A가 잠긴 공모전(키링)에 제출", await write(`submissions/keyring__${A.uid}`, {...entry(A.uid), contestId:"keyring"}, A.token), false);
 check("A가 스스로 수상 표시를 붙임", await write(`submissions/library__${A.uid}`, {...entry(A.uid), award:"grand"}, A.token), false);
@@ -70,7 +71,7 @@ check("A가 허용되지 않은 반응 종류 사용", await write(`reactions/li
 // 시험이 만들었을 수 있는 문서를 전부 지우고 끝냅니다.
 await del(`submissions/library__${A.uid}`, A.token);
 await del(`submissions/keyring__${A.uid}`, A.token);
-for (const [t, who] of [["heart", B], ["art", B], ["evil", B], ["heart", A]]) {
+for (const [t, who] of [["heart", B], ["art", B], ["evil", B], ["heart", A], ["art", A]]) {
   await del(`reactions/${targetSub}__${who.uid}__${t}`, who.token);
 }
 

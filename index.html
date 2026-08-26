@@ -15,20 +15,28 @@
   <!-- Main Stylesheet -->
   <link rel="stylesheet" href="style.css?v=1.4.0">
 
-  <!-- Firestore 백엔드 (?backend=firebase 일 때만 불러옵니다).
-       평소에는 내려받지도 않으므로 기존 사용자에게 영향이 없습니다. -->
+  <!-- Firestore 백엔드. 이제 기본값이며, ?backend=sheets 로만 옛 백엔드를 씁니다.
+       (app.js 의 BACKEND_MODE 와 판단 기준이 같아야 합니다) -->
   <script>
     (function () {
+      var mode = "firebase";
       try {
+        localStorage.removeItem("soro_backend");   // 시험 중 고정해둔 값 제거
         var q = new URLSearchParams(location.search).get("backend");
-        if (q === "firebase" || q === "sheets") localStorage.setItem("soro_backend", q);
-        if ((localStorage.getItem("soro_backend") || "sheets") === "firebase") {
-          var s = document.createElement("script");
-          s.type = "module";
-          s.src = "firebase-backend.js?v=1";
-          document.head.appendChild(s);
+        if (q === "firebase" || q === "sheets") {
+          sessionStorage.setItem("soro_backend", q);
+          mode = q;
+        } else {
+          mode = sessionStorage.getItem("soro_backend") || "firebase";
         }
-      } catch (e) { /* 저장소 접근 불가 시 기존 백엔드 유지 */ }
+      } catch (e) { /* 저장소 접근 불가 시 기본값 유지 */ }
+
+      if (mode === "firebase") {
+        var s = document.createElement("script");
+        s.type = "module";
+        s.src = "firebase-backend.js?v=2";
+        document.head.appendChild(s);
+      }
     })();
   </script>
 </head>
