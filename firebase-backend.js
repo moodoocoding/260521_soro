@@ -10,7 +10,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
   getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword,
-  signOut, onAuthStateChanged
+  signOut, onAuthStateChanged, updatePassword
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, deleteDoc, updateDoc,
@@ -25,6 +25,11 @@ const firebaseConfig = {
   projectId: "soro-migration-test",
   appId: "1:961856422255:web:8c67a9148e3e233631a89a"
 };
+
+// 비밀번호 초기화만 담당하는 기존 Apps Script 주소.
+// 학생 데이터는 전부 Firestore 에 있고, 이 주소는 "선생님이 초기화를 승인할 때"만 쓰입니다.
+const SHEETS_HELPER_URL = atob("aHR0cHM6Ly9zY3JpcHQuZ29vZ2xlLmNvbS9tYWNyb3Mvcy9BS2Z5Y2J4OGpvNzZtSmt4U2o1dWIteXN4U1VGaE9HSV9VM3kyRG4tdzRYa3JISXg5U05pbWV0a0V0WGN2aGZjZ3FTdFlzUHovZXhlYw==");
+const TEMP_PASSWORD_HINT = "a1234567!";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -330,10 +335,124 @@ const actions = {
     } catch (e) { return fail("관리자 권한이 필요합니다."); }
   },
 
-  async resetPassword() {
-    // Firebase Auth 의 비밀번호 변경은 본인 세션이나 관리자 SDK 가 필요합니다.
-    // 지금 흐름(로그인 없이 재설정)은 그대로 옮길 수 없어 별도 설계가 필요합니다.
-    return fail("비밀번호 재설정은 준비 중입니다. 선생님께 문의해 주세요.");
+  // Firebase Auth 는 비밀번호 변경에 본인 세션이나 관리자 권한을 요구하는데,
+  // 비밀번호를 잊은 학생에게는 둘 다 없습니다. 서버(Cloud Functions)가 있으면 대신
+  // 바꿔줄 수 있지만 그건 결제 계정이 필요합니다.
+  // 그래서 "학생이 요청 → 선생님이 처리" 방식으로 만들었습니다.
+  async resetPassword({ userKey }) {
+    if (!userKey) return fail("학년/반/번호/이름을 정확히 입력해 주세요.");
+    const uid = await uidOf(userKey);
+
+    // 존재하는 계정인지 먼저 확인해서, 오타로 인한 헛된 요청을 줄입니다.
+    const profile = await getDoc(doc(db, "users", uid));
+    if (!profile.exists()) {
+      return fail("해당 정보로 가입된 계정이 없습니다. 학년/반/번호/이름을 다시 확인해 주세요.");
+    }
+
+    const p = profile.data();
+    try {
+      await setDoc(doc(db, "passwordResets", uid), {
+        uid,
+        userKey,
+        name: p.name || "",
+        grade: p.grade ?? null,
+        classNum: p.classNum ?? null,
+        number: p.number ?? null,
+        email: await emailOf(userKey),
+        status: "pending",
+        requestedAt: new Date().toISOString()
+      });
+      return ok({ message: "선생님께 비밀번호 재설정 요청을 보냈습니다." });
+    } catch (e) {
+      // 이미 대기 중인 요청이 있으면 create 가 거부됩니다. 학생에게는 같은 뜻이므로 성공으로 안내합니다.
+      return ok({ message: "이미 요청이 접수되어 있습니다. 선생님께 문의해 주세요." });
+    }
+  },
+
+  // 관리자: 대기 중인 재설정 요청 목록
+  async getPasswordResets() {
+    try {
+      const snap = await getDocs(collection(db, "passwordResets"));
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      list.sort((a, b) => String(a.requestedAt).localeCompare(String(b.requestedAt)));
+      return ok({ data: list });
+    } catch (e) {
+      return fail("관리자 권한이 필요합니다.");
+    }
+  },
+
+  // 관리자: 처리 완료(요청 삭제)
+  async resolvePasswordReset({ uid }) {
+    try {
+      await deleteDoc(doc(db, "passwordResets", uid));
+      return ok({ message: "처리 완료로 표시했습니다." });
+    } catch (e) {
+      return fail("관리자 권한이 필요합니다.");
+    }
+  },
+
+  // 관리자: 승인 = 임시 비밀번호로 초기화
+  // 비밀번호 변경 자체는 브라우저에서 불가능해서 Apps Script 가 대신 처리합니다.
+  // 그 뒤 mustChangePassword 를 세워두면, 학생이 임시 비밀번호로 들어왔을 때
+  // 곧바로 새 비밀번호를 직접 정하도록 화면이 강제합니다.
+  async approvePasswordReset({ targetUid }) {
+    const me = auth.currentUser;
+    if (!me) return fail("로그인이 필요합니다.");
+
+    let res;
+    try {
+      const idToken = await me.getIdToken();
+      const r = await fetch(SHEETS_HELPER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: JSON.stringify({ action: "resetStudentPassword", idToken, targetUid })
+      });
+      res = await r.json();
+    } catch (e) {
+      return fail("초기화 서버에 연결하지 못했습니다.");
+    }
+
+    if (res.status !== "success") return fail(res.message || "초기화에 실패했습니다.");
+
+    // 다음 로그인 때 새 비밀번호를 정하도록 표시하고, 처리한 요청은 지웁니다.
+    try {
+      await updateDoc(doc(db, "users", targetUid), { mustChangePassword: true });
+      await deleteDoc(doc(db, "passwordResets", targetUid));
+    } catch (e) {
+      // 비밀번호는 이미 바뀐 상태라, 표시 실패는 알려만 주고 성공으로 둡니다.
+      console.warn("초기화는 됐으나 후처리에 실패했습니다:", e);
+    }
+    return ok({ tempPassword: res.tempPassword, message: "임시 비밀번호로 초기화했습니다." });
+  },
+
+  // 학생 본인이 새 비밀번호를 설정합니다.
+  // 로그인된 상태이므로 서버 없이 브라우저에서 바로 처리됩니다.
+  async changeOwnPassword({ newPassword }) {
+    const me = auth.currentUser;
+    if (!me) return fail("로그인이 필요합니다.");
+    if (!newPassword || newPassword.length < 6) {
+      return fail("비밀번호는 6자 이상으로 정해 주세요.");
+    }
+    if (newPassword === TEMP_PASSWORD_HINT) {
+      return fail("임시 비밀번호와 다른 비밀번호로 정해 주세요.");
+    }
+    try {
+      await updatePassword(me, newPassword);
+      await updateDoc(doc(db, "users", me.uid), { mustChangePassword: false });
+      currentProfile = null;   // 프로필을 다시 읽도록 비웁니다
+      return ok({ message: "새 비밀번호가 설정되었습니다." });
+    } catch (e) {
+      if (e.code === "auth/requires-recent-login") {
+        return fail("보안을 위해 다시 로그인한 뒤 변경해 주세요.");
+      }
+      return fail("비밀번호 변경에 실패했습니다.");
+    }
+  },
+
+  // 학생이 지금 새 비밀번호를 정해야 하는 상태인지
+  async needsPasswordChange() {
+    const p = await requireProfile();
+    return ok({ required: !!(p && p.mustChangePassword) });
   }
 };
 

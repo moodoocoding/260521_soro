@@ -1140,6 +1140,80 @@ async function handleSignUp(grade, classNum, number, name, password) {
 }
 
 // REST API or Local Password Reset
+// [Firestore 백엔드] 학생은 스스로 비밀번호를 바꿀 수 없으므로(로그인이 안 되니까)
+// 선생님께 초기화 요청만 보냅니다. 선생님이 승인하면 임시 비밀번호가 발급되고,
+// 그걸로 로그인한 뒤 아래 openForcePasswordChange() 에서 직접 새 비밀번호를 정합니다.
+async function requestPasswordReset(grade, classNum, number, name) {
+  const userKey = `${grade}_${classNum}_${number}_${name}`;
+  showToast("선생님께 요청을 보내는 중...", "info");
+
+  const result = await callBackend({ action: "resetPassword", userKey });
+  if (result.status === "error") {
+    showToast(result.message, "error");
+    return false;
+  }
+
+  showToast("선생님께 비밀번호 초기화 요청을 보냈습니다. 선생님께 확인해 주세요!", "success");
+  closeAuthDrawer();
+  return true;
+}
+
+// 선생님이 초기화해준 학생이 임시 비밀번호로 들어왔을 때,
+// 자기 비밀번호를 직접 정하도록 하는 화면입니다.
+// 로그인된 상태라 서버 없이 브라우저에서 바로 변경됩니다.
+function openForcePasswordChange() {
+  if (document.getElementById("force-pw-modal")) return;
+
+  const modal = document.createElement("div");
+  modal.id = "force-pw-modal";
+  modal.className = "force-pw-modal";
+  modal.innerHTML = `
+    <div class="force-pw-card">
+      <h2>새 비밀번호를 정해 주세요</h2>
+      <p>선생님이 비밀번호를 초기화했어요.<br>앞으로 사용할 비밀번호를 직접 정해 주세요.</p>
+
+      <label for="force-pw-new">새 비밀번호 (6자 이상)</label>
+      <input type="password" id="force-pw-new" autocomplete="new-password" placeholder="새 비밀번호">
+
+      <label for="force-pw-confirm">한 번 더 입력</label>
+      <input type="password" id="force-pw-confirm" autocomplete="new-password" placeholder="다시 입력">
+
+      <p class="force-pw-error" id="force-pw-error"></p>
+      <button type="button" id="force-pw-submit">비밀번호 설정하기</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  document.body.style.overflow = "hidden";
+
+  const err = modal.querySelector("#force-pw-error");
+  const btn = modal.querySelector("#force-pw-submit");
+
+  btn.addEventListener("click", async () => {
+    const pw = modal.querySelector("#force-pw-new").value;
+    const pw2 = modal.querySelector("#force-pw-confirm").value;
+
+    err.textContent = "";
+    if (!pw || pw.length < 6) { err.textContent = "6자 이상으로 정해 주세요."; return; }
+    if (pw !== pw2) { err.textContent = "두 칸의 비밀번호가 서로 달라요."; return; }
+
+    btn.disabled = true;
+    btn.textContent = "설정 중...";
+    const res = await callBackend({ action: "changeOwnPassword", newPassword: pw });
+
+    if (res.status === "success") {
+      modal.remove();
+      document.body.style.overflow = "";
+      showToast("새 비밀번호가 설정되었습니다. 다음부터 이 비밀번호로 로그인하세요! 🔐", "success");
+    } else {
+      err.textContent = res.message || "변경에 실패했습니다.";
+      btn.disabled = false;
+      btn.textContent = "비밀번호 설정하기";
+    }
+  });
+
+  setTimeout(() => modal.querySelector("#force-pw-new")?.focus(), 100);
+}
+
 async function handleResetPassword(grade, classNum, number, name, newPassword) {
   const userKey = `${grade}_${classNum}_${number}_${name}`;
   const hashedPassword = await hashPassword(newPassword);
@@ -1225,6 +1299,14 @@ async function handleLogin(grade, classNum, number, name, password) {
       updateLiveCounters();
       if (activeContest) openContestDetails(activeContest.id);
       showToast(`${name} 학생, 로그인 성공을 환영합니다! 🚀`, "success");
+
+      // 선생님이 비밀번호를 초기화해준 학생이면, 들어오자마자 새 비밀번호를 정하게 합니다.
+      if (BACKEND_MODE === "firebase") {
+        const need = await callBackend({ action: "needsPasswordChange" });
+        if (need.status === "success" && need.required) {
+          openForcePasswordChange();
+        }
+      }
       return true;
     } catch (error) {
       console.error(error);
@@ -4912,6 +4994,29 @@ function setupEventListeners() {
       const loginSubmitBtn = document.querySelector("#login-form button[type='submit']");
 
       // 1. 비밀번호 확인 입력창이 아직 안 보이는 상태 (초기화 모드 진입 시점)
+      // [Firestore 백엔드] 학생이 여기서 새 비밀번호를 직접 정할 수는 없습니다.
+      // 로그인이 안 되는 상태라 Firebase 가 변경을 허용하지 않기 때문입니다.
+      // 대신 선생님께 요청을 보내고, 승인 후 임시 비밀번호로 들어와서 직접 정하게 됩니다.
+      if (BACKEND_MODE === "firebase") {
+        document.querySelectorAll("#login-form .form-group").forEach(g => g.classList.remove("has-error"));
+
+        let valid = true;
+        if (!grade.value) { grade.parentElement.classList.add("has-error"); valid = false; }
+        if (!classNum.value || classNum.value < 1) { classNum.parentElement.classList.add("has-error"); valid = false; }
+        if (!number.value || number.value < 1) { number.parentElement.classList.add("has-error"); valid = false; }
+        if (!name.value.trim()) { name.parentElement.classList.add("has-error"); valid = false; }
+
+        if (!valid) {
+          showToast("학년, 반, 번호, 이름을 먼저 모두 정확히 선택/입력해 주세요.", "error");
+          return;
+        }
+
+        resetBtn.disabled = true;
+        requestPasswordReset(grade.value, classNum.value, number.value, name.value.trim())
+          .finally(() => { resetBtn.disabled = false; });
+        return;
+      }
+
       if (passwordGroup.style.display === "none" || !passwordGroup.style.display) {
         // 첫 번째 비밀번호 필드에 변경할 비밀번호가 올바르게 들어갔는지와 무관하게 무조건 노출
         passwordGroup.style.display = "flex";
@@ -6642,6 +6747,60 @@ function renderAdminContestLocks() {
   }).join("");
 }
 
+// ====================================================
+// 비밀번호 초기화 요청 처리 (관리자)
+// 승인하면 학생 비밀번호가 임시 비밀번호로 바뀌고, 학생이 그걸로 로그인해
+// 자기 비밀번호를 직접 다시 정합니다.
+// ====================================================
+async function renderPasswordResetRequests() {
+  const section = document.getElementById("admin-pwreset-section");
+  const listEl = document.getElementById("admin-pwreset-list");
+  if (!section || !listEl) return;
+
+  // 이 기능은 Firestore 백엔드에서만 동작합니다.
+  if (BACKEND_MODE !== "firebase") { section.style.display = "none"; return; }
+  section.style.display = "block";
+
+  const res = await callBackend({ action: "getPasswordResets" });
+  if (res.status !== "success") {
+    listEl.innerHTML = `<span class="admin-lock-loading">${escapeHtml(res.message || "불러오지 못했습니다.")}</span>`;
+    return;
+  }
+
+  const list = res.data || [];
+  if (!list.length) {
+    listEl.innerHTML = `<span class="admin-lock-loading">대기 중인 요청이 없습니다.</span>`;
+    return;
+  }
+
+  listEl.innerHTML = list.map(r => `
+    <button type="button" class="admin-lock-chip" id="pwreset-${r.uid}"
+            onclick="approvePasswordReset('${r.uid}', '${escapeHtml(r.name || "")}')">
+      <span class="lock-state">승인</span>
+      <span class="lock-name">${r.grade}학년 ${r.classNum}반 ${r.number}번 ${escapeHtml(r.name || "")}</span>
+    </button>
+  `).join("");
+}
+
+window.approvePasswordReset = async function (targetUid, name) {
+  if (!confirm(`${name} 학생의 비밀번호를 초기화할까요?\n\n임시 비밀번호로 바뀌고, 학생이 그 비밀번호로 로그인하면 새 비밀번호를 직접 정하게 됩니다.`)) return;
+
+  const chip = document.getElementById(`pwreset-${targetUid}`);
+  if (chip) chip.disabled = true;
+
+  const res = await callBackend({ action: "approvePasswordReset", targetUid });
+
+  if (res.status === "success") {
+    // 선생님이 학생에게 알려줘야 하므로 임시 비밀번호를 분명히 보여줍니다.
+    alert(`${name} 학생의 임시 비밀번호는\n\n        ${res.tempPassword}\n\n입니다. 학생에게 알려주세요.\n학생이 이 비밀번호로 로그인하면 새 비밀번호를 직접 정하게 됩니다.`);
+    showToast(`${name} 학생의 비밀번호를 초기화했습니다.`, "success");
+    renderPasswordResetRequests();
+  } else {
+    showToast(res.message || "초기화에 실패했습니다.", "error");
+    if (chip) chip.disabled = false;
+  }
+};
+
 window.toggleContestLock = async function (contestId) {
   if (!GOOGLE_SHEET_API_URL) {
     showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
@@ -6736,6 +6895,7 @@ window.setAdminTabMode = function(mode) {
     // 기존 공모전 데이터 렌더링
     renderAdminKPIs();
     renderAdminContestLocks();
+    renderPasswordResetRequests();
     if (adminCurrentViewMode === "gallery") {
       renderAdminSubmissionsGallery();
     } else {
@@ -7337,6 +7497,54 @@ function spawnCookieParticles() {
 
 // [관리자 인증] 하드코딩된 관리자 계정 식별자와 로그인 시 발급되는 세션 토큰 검증 헬퍼
 var ADMIN_USER_KEY = "5_1_27_김태호";
+
+// ====================================================
+// [Firebase 이전 이후] 비밀번호 초기화 — 이 스크립트가 맡는 유일한 일
+//
+// 학생 데이터는 전부 Firestore 로 옮겼습니다. 다만 "남의 비밀번호를 바꾸는 일"만은
+// 브라우저에서 할 수 없습니다. Firebase Auth 가 본인 세션이나 관리자 권한을
+// 요구하는데, 비밀번호를 잊은 학생에게는 둘 다 없기 때문입니다.
+// (Firebase 콘솔도 관리자가 비밀번호를 직접 지정하는 기능은 제공하지 않습니다)
+//
+// Cloud Functions 는 결제 계정이 필요해서, 이미 배포되어 있는 이 스크립트가
+// 그 한 가지만 대신합니다. 선생님이 승인할 때만 호출되며 학생 화면은 거치지 않습니다.
+// 초기화는 드문 작업이라 이 경로의 속도는 문제되지 않습니다.
+// ====================================================
+var FIREBASE_PROJECT_ID = "soro-migration-test";
+var TEMP_PASSWORD = "a1234567!";
+
+function sha1Hex(text) {
+  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_1, String(text), Utilities.Charset.UTF_8);
+  var hex = "";
+  for (var i = 0; i < bytes.length; i++) {
+    var b = bytes[i] < 0 ? bytes[i] + 256 : bytes[i];
+    var s = b.toString(16);
+    hex += (s.length === 1 ? "0" : "") + s;
+  }
+  return hex;
+}
+
+// 요청한 사람이 정말 관리자인지 Firebase 가 발급한 토큰으로 확인합니다.
+// 토큰은 위조할 수 없고, 구글에 직접 물어 누구인지 확인합니다.
+function verifyFirebaseAdmin(idToken) {
+  if (!idToken) return null;
+  try {
+    var res = UrlFetchApp.fetch("https://identitytoolkit.googleapis.com/v1/accounts:lookup", {
+      method: "post",
+      contentType: "application/json",
+      payload: JSON.stringify({ idToken: idToken }),
+      headers: { Authorization: "Bearer " + ScriptApp.getOAuthToken() },
+      muteHttpExceptions: true
+    });
+    var body = JSON.parse(res.getContentText());
+    if (!body.users || !body.users.length) return null;
+    var uid = body.users[0].localId;
+    return uid === sha1Hex(ADMIN_USER_KEY).slice(0, 28) ? uid : null;
+  } catch (e) {
+    Logger.log("관리자 토큰 확인 실패: " + e);
+    return null;
+  }
+}
 
 function isValidAdminToken(token) {
   if (!token) return false;
@@ -8167,6 +8375,42 @@ function doPost(e) {
 
     // 15. 감상 반응 토글 액션 (Reactions 시트)
     // 같은 학생이 같은 작품에 같은 종류의 반응을 이미 남겼다면 취소, 아니면 추가합니다.
+    // 16. [Firebase] 학생 비밀번호를 임시 비밀번호로 초기화
+    // 선생님이 승인할 때만 호출됩니다. 학생이 이 경로를 직접 부를 수는 없습니다.
+    else if (requestData.action === "resetStudentPassword") {
+      var adminUid = verifyFirebaseAdmin(requestData.idToken);
+      if (!adminUid) {
+        response = { status: "error", message: "관리자 권한이 필요합니다." };
+      } else if (!requestData.targetUid) {
+        response = { status: "error", message: "대상 학생이 지정되지 않았습니다." };
+      } else if (requestData.targetUid === adminUid) {
+        // 관리자 계정을 이 경로로 초기화하면 자기 자신을 잠글 수 있어 막습니다.
+        response = { status: "error", message: "관리자 계정은 이 방법으로 초기화할 수 없습니다." };
+      } else {
+        try {
+          var upd = UrlFetchApp.fetch(
+            "https://identitytoolkit.googleapis.com/v1/projects/" + FIREBASE_PROJECT_ID + "/accounts:update",
+            {
+              method: "post",
+              contentType: "application/json",
+              payload: JSON.stringify({ localId: requestData.targetUid, password: TEMP_PASSWORD }),
+              headers: { Authorization: "Bearer " + ScriptApp.getOAuthToken() },
+              muteHttpExceptions: true
+            }
+          );
+          var code = upd.getResponseCode();
+          if (code >= 200 && code < 300) {
+            response = { status: "success", tempPassword: TEMP_PASSWORD, message: "임시 비밀번호로 초기화했습니다." };
+          } else {
+            Logger.log("비밀번호 초기화 실패 " + code + ": " + upd.getContentText());
+            response = { status: "error", message: "초기화 실패 (" + code + "). 스크립트 권한 승인을 확인해 주세요." };
+          }
+        } catch (e) {
+          response = { status: "error", message: "초기화 중 오류: " + e.toString() };
+        }
+      }
+    }
+
     else if (requestData.action === "toggleReaction") {
       var ALLOWED_REACTIONS = ["read", "art", "heart"];
       var targetId = requestData.submissionId;

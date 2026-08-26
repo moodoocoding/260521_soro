@@ -521,6 +521,17 @@
           </button>
         </div>
         
+        <!-- 비밀번호 초기화 요청 (Firestore 백엔드에서만 표시) -->
+        <div class="admin-lock-section" id="admin-pwreset-section" style="display: none;">
+          <div class="admin-lock-head">
+            <span class="admin-lock-title">🔑 비밀번호 초기화 요청</span>
+            <span class="admin-lock-hint">승인하면 임시 비밀번호로 바뀝니다</span>
+          </div>
+          <div class="admin-lock-list" id="admin-pwreset-list">
+            <span class="admin-lock-loading">불러오는 중...</span>
+          </div>
+        </div>
+
         <!-- 공모전 접수 열기/닫기 -->
         <div class="admin-lock-section" id="admin-lock-section">
           <div class="admin-lock-head">

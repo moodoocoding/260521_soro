@@ -4845,3 +4845,93 @@ body[data-admin-mode="zepquiz"] .zepquiz-gauge-track {
 
 
 
+
+/* ----------------------------------------------------
+   비밀번호 초기화 후 새 비밀번호 설정 화면
+   선생님이 초기화해준 학생이 임시 비밀번호로 들어오면 뜹니다.
+   ---------------------------------------------------- */
+.force-pw-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  background: rgba(8, 8, 10, 0.94);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.force-pw-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+}
+
+.force-pw-card h2 {
+  margin: 0 0 8px;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.force-pw-card > p {
+  margin: 0 0 20px;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.force-pw-card label {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.force-pw-card input {
+  width: 100%;
+  padding: 11px 12px;
+  margin-bottom: 14px;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 0;
+}
+
+.force-pw-card input:focus {
+  outline: 2px solid #7fbbaf;
+  outline-offset: 1px;
+}
+
+.force-pw-error {
+  min-height: 1.2em;
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--error-color, #ef4444);
+}
+
+.force-pw-card button {
+  width: 100%;
+  padding: 13px;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 800;
+  cursor: pointer;
+  border: none;
+  border-radius: 0;
+  background: var(--text-primary);
+  color: var(--bg-primary);
+  transition: opacity var(--transition-fast);
+}
+
+.force-pw-card button:disabled { opacity: 0.55; cursor: progress; }
+.force-pw-card button:hover:not(:disabled) { opacity: 0.86; }
