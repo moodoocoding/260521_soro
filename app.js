@@ -39,10 +39,12 @@ async function callBackend(payload) {
     // 예전에는 그대로 실패해서, 잠금 정보를 못 받은 채 기본값으로 화면이 그려졌습니다.
     // 젭퀴즈는 기본값이 "3회차 접수 중"이라 잠가둔 회차가 열린 것처럼 보였습니다.
     if (!window.soroFirebase && window.soroFirebaseReady) {
+      let waitTimer;
       await Promise.race([
         window.soroFirebaseReady,
-        new Promise(resolve => setTimeout(resolve, 10000))
+        new Promise(resolve => { waitTimer = setTimeout(resolve, 10000); })
       ]);
+      clearTimeout(waitTimer);
     }
     if (!window.soroFirebase) {
       console.error("Firebase 백엔드가 아직 준비되지 않았습니다.");
@@ -7033,9 +7035,16 @@ window.setAsActiveZepRound = async function() {
 // 젭퀴즈 전체 잠금 / 해제
 window.toggleZepQuizLock = async function() {
   if (isZepQuizLocked()) {
+    // 잠긴 상태로 페이지를 열면 회차 목록이 활성 회차와 동기화되지 않습니다
+    // (잠금에는 대응하는 회차가 없어서입니다). 그래서 어느 회차가 열리는지
+    // 분명히 보여 주고, 바꾸는 방법도 함께 알립니다.
     const roundSelect = document.getElementById("admin-zep-round-select");
     const roundNum = roundSelect ? roundSelect.value.substring(8) : "3";
-    if (!confirm(`젭퀴즈 잠금을 풀고 ${roundNum}회차를 접수 중으로 엽니다.`)) return;
+    if (!confirm(
+      `젭퀴즈 잠금을 풉니다.\n\n` +
+      `▶ ${roundNum}회차가 접수 중이 됩니다.\n\n` +
+      `다른 회차를 열려면 [취소]를 누르고, 왼쪽 회차 목록에서 원하는 회차를 고른 뒤 다시 눌러 주세요.`
+    )) return;
     await applyActiveZepRound(roundNum, {
       busyText: `젭퀴즈 잠금을 푸는 중...`,
       doneText: `젭퀴즈 ${roundNum}회차가 열렸습니다.`
