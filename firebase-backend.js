@@ -477,3 +477,8 @@ window.soroFirebase = {
 };
 
 console.log("[firebase] 백엔드 준비 완료 — 프로젝트:", firebaseConfig.projectId);
+
+// 로딩을 기다리고 있던 호출들을 풀어 줍니다.
+if (typeof window !== "undefined" && window.__soroFirebaseResolve) {
+  window.__soroFirebaseResolve();
+}

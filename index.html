@@ -32,9 +32,17 @@
       } catch (e) { /* 저장소 접근 불가 시 기본값 유지 */ }
 
       if (mode === "firebase") {
+        // 모듈은 Firebase SDK 를 CDN 에서 한 번 더 받아오므로 app.js 보다 늦게 끝납니다.
+        // 그동안 들어온 호출이 "준비 안 됨"으로 그냥 실패하지 않도록, 준비 완료를
+        // 기다릴 수 있는 약속을 미리 만들어 둡니다.
+        window.soroFirebaseReady = new Promise(function (resolve) {
+          window.__soroFirebaseResolve = resolve;
+        });
         var s = document.createElement("script");
         s.type = "module";
-        s.src = "firebase-backend.js?v=2";
+        s.src = "firebase-backend.js?v=3";
+        // 모듈을 아예 못 받아온 경우에도 기다리는 쪽이 멈추지 않게 풀어 줍니다.
+        s.onerror = function () { window.__soroFirebaseResolve && window.__soroFirebaseResolve(); };
         document.head.appendChild(s);
       }
     })();
@@ -770,6 +778,11 @@
               <button onclick="setAsActiveZepRound()" style="padding: 6px 14px; font-size: 0.75rem; font-weight: 800; border-radius: 6px; cursor: pointer; background: #3b82f6; border: none; color: white; transition: background 0.2s;">
                 선택한 회차를 접수 중으로 설정
               </button>
+              <!-- 젭퀴즈는 다른 공모전과 달리 잠금 설정이 없어 회차로만 굴러갑니다.
+                   이 버튼은 존재하지 않는 회차(0)를 접수 중으로 지정해 전부 닫습니다. -->
+              <button id="admin-zep-lock-btn" onclick="toggleZepQuizLock()" style="padding: 6px 14px; font-size: 0.75rem; font-weight: 800; border-radius: 6px; cursor: pointer; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #fca5a5; transition: background 0.2s;">
+                🔒 젭퀴즈 잠금
+              </button>
             </div>
           </div>
 
@@ -802,6 +815,6 @@
 
 
   <!-- Main JavaScript -->
-  <script src="app.js?v=2.6.1" defer></script>
+  <script src="app.js?v=2.7.0" defer></script>
 </body>
 </html>

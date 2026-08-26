@@ -35,6 +35,15 @@ const BACKEND_MODE = (() => {
 
 async function callBackend(payload) {
   if (BACKEND_MODE === "firebase") {
+    // 페이지가 열리자마자 부르는 호출(공모전 잠금 조회 등)은 모듈보다 먼저 도착합니다.
+    // 예전에는 그대로 실패해서, 잠금 정보를 못 받은 채 기본값으로 화면이 그려졌습니다.
+    // 젭퀴즈는 기본값이 "3회차 접수 중"이라 잠가둔 회차가 열린 것처럼 보였습니다.
+    if (!window.soroFirebase && window.soroFirebaseReady) {
+      await Promise.race([
+        window.soroFirebaseReady,
+        new Promise(resolve => setTimeout(resolve, 10000))
+      ]);
+    }
     if (!window.soroFirebase) {
       console.error("Firebase 백엔드가 아직 준비되지 않았습니다.");
       return { status: "error", message: "백엔드를 불러오지 못했습니다." };
@@ -64,6 +73,19 @@ let contestLocks = {};
 let currentActiveZepRound = "3"; // Currently active round for student submissions
 let adminSelectedZepRound = "zepquiz_3"; // Selected round in admin dashboard view
 
+// 젭퀴즈에는 다른 공모전 같은 잠금 설정이 없고 "접수 중인 회차" 하나로만 굴러갑니다.
+// 그래서 존재하지 않는 회차인 0 을 "전부 닫힘"을 뜻하는 값으로 씁니다.
+// 어떤 회차도 0 과 같지 않으니 학생 화면에서 젭퀴즈 카드가 사라지고,
+// 보안 규칙의 isActiveZepRound 도 zepquiz_0 을 찾으므로 제출이 전부 막힙니다.
+const ZEPQUIZ_LOCKED = "0";
+// 서버에서 활성 회차를 아직 못 받아온 동안에는 젭퀴즈를 닫힌 것으로 둡니다.
+// 다른 공모전이 "잠금 정보가 없으면 마감"인 것과 같은 원칙입니다. 이게 없으면
+// 잠가둔 상태에서도 첫 화면에 기본값 3회차가 접수 중으로 잠깐 보입니다.
+let zepRoundLoaded = false;
+const isZepQuizLocked = () => String(currentActiveZepRound) === ZEPQUIZ_LOCKED;
+const zepRoundLabel = round =>
+  String(round) === ZEPQUIZ_LOCKED ? "잠김 (접수 없음)" : `${round}회차`;
+
 async function fetchContestLocks() {
   if (!GOOGLE_SHEET_API_URL) return;
   try {
@@ -73,18 +95,21 @@ async function fetchContestLocks() {
       if (result.activeRound) {
         // 서버에 저장된 활성 회차를 학생 화면과 동기화합니다.
         const parsedRound = parseInt(result.activeRound, 10);
-        currentActiveZepRound = (isNaN(parsedRound) || parsedRound < 1 ? 3 : parsedRound).toString();
+        // 0 은 잠금을 뜻하는 정상 값이므로 살려둡니다. 예전에는 1 미만을 전부 3 으로
+        // 되돌려서, 잠가도 조용히 3회차가 다시 열렸습니다.
+        currentActiveZepRound = (isNaN(parsedRound) || parsedRound < 0 ? 3 : parsedRound).toString();
+        zepRoundLoaded = true;
         
         // Sync adminSelectedZepRound initial state with current active round
-        adminSelectedZepRound = `zepquiz_${currentActiveZepRound}`;
-        const roundSelect = document.getElementById("admin-zep-round-select");
-        if (roundSelect) {
-          roundSelect.value = adminSelectedZepRound;
+        // 잠금 상태에는 대응하는 회차가 없으므로 통계용 선택은 그대로 둡니다.
+        if (!isZepQuizLocked()) {
+          adminSelectedZepRound = `zepquiz_${currentActiveZepRound}`;
+          const roundSelect = document.getElementById("admin-zep-round-select");
+          if (roundSelect) {
+            roundSelect.value = adminSelectedZepRound;
+          }
         }
-        const activeLabel = document.getElementById("admin-zep-active-label");
-        if (activeLabel) {
-          activeLabel.textContent = `${currentActiveZepRound}회차`;
-        }
+        updateZepActiveLabel();
       }
       renderContestGrid();
     }
@@ -718,6 +743,10 @@ function getContestStatus(contestOrMonth) {
   if (contestId && contestId.startsWith("zepquiz_")) {
     const roundNum = parseInt(contestId.substring(8), 10);
     const activeRoundNum = parseInt(currentActiveZepRound, 10);
+    if (!zepRoundLoaded || activeRoundNum === 0) {
+      // 잠금 상태이거나 아직 확인 전 — 전부 마감으로 보여 줍니다.
+      return "closed";
+    }
     if (roundNum === activeRoundNum) {
       return "active";
     } else if (roundNum < activeRoundNum) {
@@ -1410,7 +1439,8 @@ function renderContestGrid() {
 
   CONTESTS_DATA.forEach(contest => {
     // 젭퀴즈 회차 카드는 현재 활성화된 회차만 메인 그리드에 남김 (관리자는 전부 노출)
-    if (contest.id.startsWith("zepquiz_") && contest.id !== `zepquiz_${currentActiveZepRound}` && !checkIsAdmin()) {
+    if (contest.id.startsWith("zepquiz_") && !checkIsAdmin() &&
+        (!zepRoundLoaded || contest.id !== `zepquiz_${currentActiveZepRound}`)) {
       return;
     }
     const status = getContestStatus(contest);
@@ -6939,46 +6969,85 @@ window.handleZepRoundChange = function() {
   fetchZepQuizDataAndRender();
 };
 
-// 선택한 회차를 활성 회차로 스프레드시트에 영구 저장
+// 접수 중인 회차 라벨을 현재 상태에 맞춥니다. 잠금이면 색도 회색으로 바꿔
+// 열려 있는 상태와 한눈에 구분되게 합니다.
+function updateZepActiveLabel() {
+  const activeLabel = document.getElementById("admin-zep-active-label");
+  if (!activeLabel) return;
+  activeLabel.textContent = zepRoundLabel(currentActiveZepRound);
+  const locked = isZepQuizLocked();
+  activeLabel.style.color = locked ? "#9ca3af" : "#22c55e";
+  activeLabel.style.background = locked ? "rgba(156, 163, 175, 0.1)" : "rgba(34, 197, 94, 0.1)";
+  activeLabel.style.borderColor = locked ? "rgba(156, 163, 175, 0.2)" : "rgba(34, 197, 94, 0.2)";
+
+  const lockBtn = document.getElementById("admin-zep-lock-btn");
+  if (lockBtn) {
+    lockBtn.textContent = locked ? "🔓 젭퀴즈 잠금 해제" : "🔒 젭퀴즈 잠금";
+    lockBtn.style.background = locked ? "rgba(34, 197, 94, 0.15)" : "rgba(239, 68, 68, 0.15)";
+    lockBtn.style.borderColor = locked ? "rgba(34, 197, 94, 0.35)" : "rgba(239, 68, 68, 0.35)";
+    lockBtn.style.color = locked ? "#86efac" : "#fca5a5";
+  }
+}
+
+// 접수 중인 회차를 서버에 저장합니다. 회차 지정과 잠금이 같은 동작이라
+// (잠금은 존재하지 않는 회차 0 을 지정하는 것) 한 곳에서 처리합니다.
+async function applyActiveZepRound(roundNum, { busyText, doneText }) {
+  if (!GOOGLE_SHEET_API_URL) {
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+    return;
+  }
+  showToast(busyText, "info");
+  try {
+    const result = await callBackend({
+      action: "updateActiveZepRound",
+      activeRound: roundNum,
+      adminToken: getAdminToken()
+    });
+    if (result.status === "success") {
+      currentActiveZepRound = String(roundNum);
+      zepRoundLoaded = true;
+      updateZepActiveLabel();
+      renderContestGrid();
+      showToast(doneText, "success");
+    } else {
+      showToast("설정 실패: " + result.message, "error");
+    }
+  } catch (e) {
+    console.error(e);
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+  }
+}
+
+// 선택한 회차를 활성 회차로 영구 저장
 window.setAsActiveZepRound = async function() {
   const roundSelect = document.getElementById("admin-zep-round-select");
   if (!roundSelect) return;
-  
-  const selectedRound = roundSelect.value;
-  const roundNum = selectedRound.substring(8); // 'zepquiz_' 뒤의 숫자
-  
-  showToast(`${roundNum}회차를 학생 활성 회차로 설정하는 중...`, "info");
-  
-  if (GOOGLE_SHEET_API_URL) {
-    try {
-      const result = await callBackend({
-          action: "updateActiveZepRound",
-          activeRound: roundNum,
-          adminToken: getAdminToken()
-        });
-      if (result.status === "success") {
-        currentActiveZepRound = roundNum.toString();
-        
-        // UI 라벨 동기화
-        const activeLabel = document.getElementById("admin-zep-active-label");
-        if (activeLabel) {
-          activeLabel.textContent = `${currentActiveZepRound}회차`;
-        }
-        
-        // 학생 카드 그리드 새로 렌더링
-        renderContestGrid();
-        
-        showToast(`${roundNum}회차 젭퀴즈가 활성 회차로 설정되었습니다!`, "success");
-      } else {
-        showToast("설정 실패: " + result.message, "error");
-      }
-    } catch (e) {
-      console.error(e);
-      showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
-    }
-  } else {
-    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+
+  const roundNum = roundSelect.value.substring(8); // 'zepquiz_' 뒤의 숫자
+  await applyActiveZepRound(roundNum, {
+    busyText: `${roundNum}회차를 학생 활성 회차로 설정하는 중...`,
+    doneText: `${roundNum}회차 젭퀴즈가 활성 회차로 설정되었습니다!`
+  });
+};
+
+// 젭퀴즈 전체 잠금 / 해제
+window.toggleZepQuizLock = async function() {
+  if (isZepQuizLocked()) {
+    const roundSelect = document.getElementById("admin-zep-round-select");
+    const roundNum = roundSelect ? roundSelect.value.substring(8) : "3";
+    if (!confirm(`젭퀴즈 잠금을 풀고 ${roundNum}회차를 접수 중으로 엽니다.`)) return;
+    await applyActiveZepRound(roundNum, {
+      busyText: `젭퀴즈 잠금을 푸는 중...`,
+      doneText: `젭퀴즈 ${roundNum}회차가 열렸습니다.`
+    });
+    return;
   }
+
+  if (!confirm("젭퀴즈를 잠급니다.\n\n모든 회차가 마감되고 학생 화면에서 젭퀴즈 카드가 사라집니다.\n이미 제출된 기록은 그대로 남습니다.")) return;
+  await applyActiveZepRound(ZEPQUIZ_LOCKED, {
+    busyText: "젭퀴즈를 잠그는 중...",
+    doneText: "젭퀴즈가 잠겼습니다. 학생 화면에서 사라집니다."
+  });
 };
 
 // 젭퀴즈 데이터 로드 및 렌더러
