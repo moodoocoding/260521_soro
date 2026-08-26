@@ -230,6 +230,110 @@ const actions = {
   async updateSubmissionPrizeStatus({ id, prizeStatus }) {
     try { await updateDoc(doc(db, "submissions", id), { prizeStatus }); return ok({}); }
     catch (e) { return fail("관리자 권한이 필요합니다."); }
+  },
+
+  // ---------- 관리자 전용 (5단계에서 추가) ----------
+
+  async getZepQuizStats({ roundId }) {
+    const round = roundId || "zepquiz";
+
+    const [usersSnap, subsSnap, settingsSnap] = await Promise.all([
+      getDocs(collection(db, "users")),
+      getDocs(query(collection(db, "submissions"), where("contestId", "==", round))),
+      getDocs(collection(db, "settings"))
+    ]);
+
+    // 학급 과자 지급 상태와 학생 정원 설정 읽기
+    const classPrizes = {}, classCounts = {};
+    settingsSnap.forEach(d => {
+      const prizePrefix = `zep_prize_${round}_`;
+      if (d.id.startsWith(prizePrefix)) classPrizes[d.id.slice(prizePrefix.length)] = d.data().value;
+      else if (d.id.startsWith("zep_student_count_")) {
+        classCounts[d.id.slice("zep_student_count_".length)] = parseInt(d.data().value, 10);
+      }
+    });
+
+    // 이 회차를 제출한 학생 목록
+    const submitted = new Map();
+    subsSnap.forEach(d => {
+      const x = d.data();
+      submitted.set(x.uid, { id: d.id, timestamp: x.timestamp || "", image: (x.data || {}).image || "" });
+    });
+
+    const GRADE_CLASS_LIMITS = { 3: 6, 4: 7, 5: 6, 6: 5 };
+    const classes = {};
+    for (let g = 3; g <= 6; g++) {
+      for (let c = 1; c <= (GRADE_CLASS_LIMITS[g] || 3); c++) {
+        const key = `${g}-${c}`;
+        const configured = classCounts[key];
+        classes[key] = {
+          grade: g, classNum: c,
+          totalStudents: typeof configured === "number" && !isNaN(configured) ? configured : 0,
+          completedCount: 0,
+          prizeStatus: classPrizes[key] || "waiting",
+          students: [],
+          isCustomStudentCount: typeof configured === "number" && !isNaN(configured)
+        };
+      }
+    }
+
+    usersSnap.forEach(d => {
+      const u = d.data();
+      // 전시 전용으로 만든 계정(탈퇴 학생)은 참여율 집계에서 뺍니다.
+      if (u.inactive === true) return;
+      const key = `${u.grade}-${u.classNum}`;
+      const cls = classes[key];
+      if (!cls) return;
+
+      if (!cls.isCustomStudentCount) cls.totalStudents++;
+      const done = submitted.get(d.id);
+      if (done) cls.completedCount++;
+
+      cls.students.push({
+        name: u.name, number: u.number, username: u.userKey || "",
+        completed: !!done,
+        timestamp: done ? done.timestamp : "",
+        image: done ? done.image : "",
+        submissionId: done ? done.id : ""
+      });
+    });
+
+    Object.values(classes).forEach(c => c.students.sort((a, b) => a.number - b.number));
+    return ok({ classes });
+  },
+
+  async deleteUser({ userKey }) {
+    // Auth 계정 삭제는 관리자 SDK 가 필요해 여기서는 못 합니다.
+    // 프로필과 제출물만 지우고, 그 사실을 분명히 알립니다.
+    try {
+      const uid = await uidOf(userKey);
+      const subs = await getDocs(query(collection(db, "submissions"), where("uid", "==", uid)));
+      await Promise.all(subs.docs.map(d => deleteDoc(d.ref)));
+      await deleteDoc(doc(db, "users", uid));
+      return ok({ message: `제출물 ${subs.size}건과 프로필을 삭제했습니다. (로그인 계정 자체는 Firebase 콘솔에서 지워야 합니다)` });
+    } catch (e) {
+      return fail("관리자 권한이 필요합니다.");
+    }
+  },
+
+  async updateClassPrizeStatus({ roundId, classKey, prizeStatus }) {
+    try {
+      await setDoc(doc(db, "settings", `zep_prize_${roundId || "zepquiz"}_${classKey}`), { value: prizeStatus });
+      return ok({ message: "과자 지급 상태 업데이트 완료" });
+    } catch (e) { return fail("관리자 권한이 필요합니다."); }
+  },
+
+  async updateClassStudentCount({ classKey, studentCount }) {
+    try {
+      await setDoc(doc(db, "settings", `zep_student_count_${classKey}`), { value: parseInt(studentCount, 10) });
+      return ok({ message: "학생 수 설정 완료" });
+    } catch (e) { return fail("관리자 권한이 필요합니다."); }
+  },
+
+  async resetPassword() {
+    // Firebase Auth 의 비밀번호 변경은 본인 세션이나 관리자 SDK 가 필요합니다.
+    // 지금 흐름(로그인 없이 재설정)은 그대로 옮길 수 없어 별도 설계가 필요합니다.
+    return fail("비밀번호 재설정은 준비 중입니다. 선생님께 문의해 주세요.");
   }
 };
 
