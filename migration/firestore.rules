@@ -160,6 +160,21 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ---------- 비밀번호 재설정 요청 ----------
+    // 비밀번호를 잊은 학생은 로그인 자체를 못 하므로 이 요청만은 비로그인으로 만들 수 있어야 합니다.
+    // 문서 ID 를 uid 로 고정해 한 학생당 대기 중인 요청이 하나만 존재하도록 했습니다.
+    // 선생님이 처리하면 문서를 지웁니다(= 처리 완료).
+    match /passwordResets/{uid} {
+      // 실제로 존재하는 계정에 대해서만, pending 상태로만 만들 수 있습니다.
+      allow create: if exists(/databases/$(database)/documents/users/$(uid))
+                    && request.resource.data.uid == uid
+                    && request.resource.data.status == 'pending';
+
+      // 만들어진 요청은 아무도 고칠 수 없습니다. 선생님이 지우는 것으로 끝냅니다.
+      allow update: if false;
+      allow read, delete: if isAdmin();
+    }
+
     // ---------- 그 외 전부 차단 ----------
     match /{document=**} {
       allow read, write: if false;

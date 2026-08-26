@@ -35,6 +35,17 @@ const BACKEND_MODE = (() => {
 
 async function callBackend(payload) {
   if (BACKEND_MODE === "firebase") {
+    // 페이지가 열리자마자 부르는 호출(공모전 잠금 조회 등)은 모듈보다 먼저 도착합니다.
+    // 예전에는 그대로 실패해서, 잠금 정보를 못 받은 채 기본값으로 화면이 그려졌습니다.
+    // 젭퀴즈는 기본값이 "3회차 접수 중"이라 잠가둔 회차가 열린 것처럼 보였습니다.
+    if (!window.soroFirebase && window.soroFirebaseReady) {
+      let waitTimer;
+      await Promise.race([
+        window.soroFirebaseReady,
+        new Promise(resolve => { waitTimer = setTimeout(resolve, 10000); })
+      ]);
+      clearTimeout(waitTimer);
+    }
     if (!window.soroFirebase) {
       console.error("Firebase 백엔드가 아직 준비되지 않았습니다.");
       return { status: "error", message: "백엔드를 불러오지 못했습니다." };
@@ -64,6 +75,19 @@ let contestLocks = {};
 let currentActiveZepRound = "3"; // Currently active round for student submissions
 let adminSelectedZepRound = "zepquiz_3"; // Selected round in admin dashboard view
 
+// 젭퀴즈에는 다른 공모전 같은 잠금 설정이 없고 "접수 중인 회차" 하나로만 굴러갑니다.
+// 그래서 존재하지 않는 회차인 0 을 "전부 닫힘"을 뜻하는 값으로 씁니다.
+// 어떤 회차도 0 과 같지 않으니 학생 화면에서 젭퀴즈 카드가 사라지고,
+// 보안 규칙의 isActiveZepRound 도 zepquiz_0 을 찾으므로 제출이 전부 막힙니다.
+const ZEPQUIZ_LOCKED = "0";
+// 서버에서 활성 회차를 아직 못 받아온 동안에는 젭퀴즈를 닫힌 것으로 둡니다.
+// 다른 공모전이 "잠금 정보가 없으면 마감"인 것과 같은 원칙입니다. 이게 없으면
+// 잠가둔 상태에서도 첫 화면에 기본값 3회차가 접수 중으로 잠깐 보입니다.
+let zepRoundLoaded = false;
+const isZepQuizLocked = () => String(currentActiveZepRound) === ZEPQUIZ_LOCKED;
+const zepRoundLabel = round =>
+  String(round) === ZEPQUIZ_LOCKED ? "잠김 (접수 없음)" : `${round}회차`;
+
 async function fetchContestLocks() {
   if (!GOOGLE_SHEET_API_URL) return;
   try {
@@ -73,18 +97,21 @@ async function fetchContestLocks() {
       if (result.activeRound) {
         // 서버에 저장된 활성 회차를 학생 화면과 동기화합니다.
         const parsedRound = parseInt(result.activeRound, 10);
-        currentActiveZepRound = (isNaN(parsedRound) || parsedRound < 1 ? 3 : parsedRound).toString();
+        // 0 은 잠금을 뜻하는 정상 값이므로 살려둡니다. 예전에는 1 미만을 전부 3 으로
+        // 되돌려서, 잠가도 조용히 3회차가 다시 열렸습니다.
+        currentActiveZepRound = (isNaN(parsedRound) || parsedRound < 0 ? 3 : parsedRound).toString();
+        zepRoundLoaded = true;
         
         // Sync adminSelectedZepRound initial state with current active round
-        adminSelectedZepRound = `zepquiz_${currentActiveZepRound}`;
-        const roundSelect = document.getElementById("admin-zep-round-select");
-        if (roundSelect) {
-          roundSelect.value = adminSelectedZepRound;
+        // 잠금 상태에는 대응하는 회차가 없으므로 통계용 선택은 그대로 둡니다.
+        if (!isZepQuizLocked()) {
+          adminSelectedZepRound = `zepquiz_${currentActiveZepRound}`;
+          const roundSelect = document.getElementById("admin-zep-round-select");
+          if (roundSelect) {
+            roundSelect.value = adminSelectedZepRound;
+          }
         }
-        const activeLabel = document.getElementById("admin-zep-active-label");
-        if (activeLabel) {
-          activeLabel.textContent = `${currentActiveZepRound}회차`;
-        }
+        updateZepActiveLabel();
       }
       renderContestGrid();
     }
@@ -718,6 +745,10 @@ function getContestStatus(contestOrMonth) {
   if (contestId && contestId.startsWith("zepquiz_")) {
     const roundNum = parseInt(contestId.substring(8), 10);
     const activeRoundNum = parseInt(currentActiveZepRound, 10);
+    if (!zepRoundLoaded || activeRoundNum === 0) {
+      // 잠금 상태이거나 아직 확인 전 — 전부 마감으로 보여 줍니다.
+      return "closed";
+    }
     if (roundNum === activeRoundNum) {
       return "active";
     } else if (roundNum < activeRoundNum) {
@@ -1140,6 +1171,80 @@ async function handleSignUp(grade, classNum, number, name, password) {
 }
 
 // REST API or Local Password Reset
+// [Firestore 백엔드] 학생은 스스로 비밀번호를 바꿀 수 없으므로(로그인이 안 되니까)
+// 선생님께 초기화 요청만 보냅니다. 선생님이 승인하면 임시 비밀번호가 발급되고,
+// 그걸로 로그인한 뒤 아래 openForcePasswordChange() 에서 직접 새 비밀번호를 정합니다.
+async function requestPasswordReset(grade, classNum, number, name) {
+  const userKey = `${grade}_${classNum}_${number}_${name}`;
+  showToast("선생님께 요청을 보내는 중...", "info");
+
+  const result = await callBackend({ action: "resetPassword", userKey });
+  if (result.status === "error") {
+    showToast(result.message, "error");
+    return false;
+  }
+
+  showToast("선생님께 비밀번호 초기화 요청을 보냈습니다. 선생님께 확인해 주세요!", "success");
+  closeAuthDrawer();
+  return true;
+}
+
+// 선생님이 초기화해준 학생이 임시 비밀번호로 들어왔을 때,
+// 자기 비밀번호를 직접 정하도록 하는 화면입니다.
+// 로그인된 상태라 서버 없이 브라우저에서 바로 변경됩니다.
+function openForcePasswordChange() {
+  if (document.getElementById("force-pw-modal")) return;
+
+  const modal = document.createElement("div");
+  modal.id = "force-pw-modal";
+  modal.className = "force-pw-modal";
+  modal.innerHTML = `
+    <div class="force-pw-card">
+      <h2>새 비밀번호를 정해 주세요</h2>
+      <p>선생님이 비밀번호를 초기화했어요.<br>앞으로 사용할 비밀번호를 직접 정해 주세요.</p>
+
+      <label for="force-pw-new">새 비밀번호 (6자 이상)</label>
+      <input type="password" id="force-pw-new" autocomplete="new-password" placeholder="새 비밀번호">
+
+      <label for="force-pw-confirm">한 번 더 입력</label>
+      <input type="password" id="force-pw-confirm" autocomplete="new-password" placeholder="다시 입력">
+
+      <p class="force-pw-error" id="force-pw-error"></p>
+      <button type="button" id="force-pw-submit">비밀번호 설정하기</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  document.body.style.overflow = "hidden";
+
+  const err = modal.querySelector("#force-pw-error");
+  const btn = modal.querySelector("#force-pw-submit");
+
+  btn.addEventListener("click", async () => {
+    const pw = modal.querySelector("#force-pw-new").value;
+    const pw2 = modal.querySelector("#force-pw-confirm").value;
+
+    err.textContent = "";
+    if (!pw || pw.length < 6) { err.textContent = "6자 이상으로 정해 주세요."; return; }
+    if (pw !== pw2) { err.textContent = "두 칸의 비밀번호가 서로 달라요."; return; }
+
+    btn.disabled = true;
+    btn.textContent = "설정 중...";
+    const res = await callBackend({ action: "changeOwnPassword", newPassword: pw });
+
+    if (res.status === "success") {
+      modal.remove();
+      document.body.style.overflow = "";
+      showToast("새 비밀번호가 설정되었습니다. 다음부터 이 비밀번호로 로그인하세요! 🔐", "success");
+    } else {
+      err.textContent = res.message || "변경에 실패했습니다.";
+      btn.disabled = false;
+      btn.textContent = "비밀번호 설정하기";
+    }
+  });
+
+  setTimeout(() => modal.querySelector("#force-pw-new")?.focus(), 100);
+}
+
 async function handleResetPassword(grade, classNum, number, name, newPassword) {
   const userKey = `${grade}_${classNum}_${number}_${name}`;
   const hashedPassword = await hashPassword(newPassword);
@@ -1225,6 +1330,14 @@ async function handleLogin(grade, classNum, number, name, password) {
       updateLiveCounters();
       if (activeContest) openContestDetails(activeContest.id);
       showToast(`${name} 학생, 로그인 성공을 환영합니다! 🚀`, "success");
+
+      // 선생님이 비밀번호를 초기화해준 학생이면, 들어오자마자 새 비밀번호를 정하게 합니다.
+      if (BACKEND_MODE === "firebase") {
+        const need = await callBackend({ action: "needsPasswordChange" });
+        if (need.status === "success" && need.required) {
+          openForcePasswordChange();
+        }
+      }
       return true;
     } catch (error) {
       console.error(error);
@@ -1328,7 +1441,8 @@ function renderContestGrid() {
 
   CONTESTS_DATA.forEach(contest => {
     // 젭퀴즈 회차 카드는 현재 활성화된 회차만 메인 그리드에 남김 (관리자는 전부 노출)
-    if (contest.id.startsWith("zepquiz_") && contest.id !== `zepquiz_${currentActiveZepRound}` && !checkIsAdmin()) {
+    if (contest.id.startsWith("zepquiz_") && !checkIsAdmin() &&
+        (!zepRoundLoaded || contest.id !== `zepquiz_${currentActiveZepRound}`)) {
       return;
     }
     const status = getContestStatus(contest);
@@ -4912,6 +5026,29 @@ function setupEventListeners() {
       const loginSubmitBtn = document.querySelector("#login-form button[type='submit']");
 
       // 1. 비밀번호 확인 입력창이 아직 안 보이는 상태 (초기화 모드 진입 시점)
+      // [Firestore 백엔드] 학생이 여기서 새 비밀번호를 직접 정할 수는 없습니다.
+      // 로그인이 안 되는 상태라 Firebase 가 변경을 허용하지 않기 때문입니다.
+      // 대신 선생님께 요청을 보내고, 승인 후 임시 비밀번호로 들어와서 직접 정하게 됩니다.
+      if (BACKEND_MODE === "firebase") {
+        document.querySelectorAll("#login-form .form-group").forEach(g => g.classList.remove("has-error"));
+
+        let valid = true;
+        if (!grade.value) { grade.parentElement.classList.add("has-error"); valid = false; }
+        if (!classNum.value || classNum.value < 1) { classNum.parentElement.classList.add("has-error"); valid = false; }
+        if (!number.value || number.value < 1) { number.parentElement.classList.add("has-error"); valid = false; }
+        if (!name.value.trim()) { name.parentElement.classList.add("has-error"); valid = false; }
+
+        if (!valid) {
+          showToast("학년, 반, 번호, 이름을 먼저 모두 정확히 선택/입력해 주세요.", "error");
+          return;
+        }
+
+        resetBtn.disabled = true;
+        requestPasswordReset(grade.value, classNum.value, number.value, name.value.trim())
+          .finally(() => { resetBtn.disabled = false; });
+        return;
+      }
+
       if (passwordGroup.style.display === "none" || !passwordGroup.style.display) {
         // 첫 번째 비밀번호 필드에 변경할 비밀번호가 올바르게 들어갔는지와 무관하게 무조건 노출
         passwordGroup.style.display = "flex";
@@ -6642,6 +6779,60 @@ function renderAdminContestLocks() {
   }).join("");
 }
 
+// ====================================================
+// 비밀번호 초기화 요청 처리 (관리자)
+// 승인하면 학생 비밀번호가 임시 비밀번호로 바뀌고, 학생이 그걸로 로그인해
+// 자기 비밀번호를 직접 다시 정합니다.
+// ====================================================
+async function renderPasswordResetRequests() {
+  const section = document.getElementById("admin-pwreset-section");
+  const listEl = document.getElementById("admin-pwreset-list");
+  if (!section || !listEl) return;
+
+  // 이 기능은 Firestore 백엔드에서만 동작합니다.
+  if (BACKEND_MODE !== "firebase") { section.style.display = "none"; return; }
+  section.style.display = "block";
+
+  const res = await callBackend({ action: "getPasswordResets" });
+  if (res.status !== "success") {
+    listEl.innerHTML = `<span class="admin-lock-loading">${escapeHtml(res.message || "불러오지 못했습니다.")}</span>`;
+    return;
+  }
+
+  const list = res.data || [];
+  if (!list.length) {
+    listEl.innerHTML = `<span class="admin-lock-loading">대기 중인 요청이 없습니다.</span>`;
+    return;
+  }
+
+  listEl.innerHTML = list.map(r => `
+    <button type="button" class="admin-lock-chip" id="pwreset-${r.uid}"
+            onclick="approvePasswordReset('${r.uid}', '${escapeHtml(r.name || "")}')">
+      <span class="lock-state">승인</span>
+      <span class="lock-name">${r.grade}학년 ${r.classNum}반 ${r.number}번 ${escapeHtml(r.name || "")}</span>
+    </button>
+  `).join("");
+}
+
+window.approvePasswordReset = async function (targetUid, name) {
+  if (!confirm(`${name} 학생의 비밀번호를 초기화할까요?\n\n임시 비밀번호로 바뀌고, 학생이 그 비밀번호로 로그인하면 새 비밀번호를 직접 정하게 됩니다.`)) return;
+
+  const chip = document.getElementById(`pwreset-${targetUid}`);
+  if (chip) chip.disabled = true;
+
+  const res = await callBackend({ action: "approvePasswordReset", targetUid });
+
+  if (res.status === "success") {
+    // 선생님이 학생에게 알려줘야 하므로 임시 비밀번호를 분명히 보여줍니다.
+    alert(`${name} 학생의 임시 비밀번호는\n\n        ${res.tempPassword}\n\n입니다. 학생에게 알려주세요.\n학생이 이 비밀번호로 로그인하면 새 비밀번호를 직접 정하게 됩니다.`);
+    showToast(`${name} 학생의 비밀번호를 초기화했습니다.`, "success");
+    renderPasswordResetRequests();
+  } else {
+    showToast(res.message || "초기화에 실패했습니다.", "error");
+    if (chip) chip.disabled = false;
+  }
+};
+
 window.toggleContestLock = async function (contestId) {
   if (!GOOGLE_SHEET_API_URL) {
     showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
@@ -6736,6 +6927,7 @@ window.setAdminTabMode = function(mode) {
     // 기존 공모전 데이터 렌더링
     renderAdminKPIs();
     renderAdminContestLocks();
+    renderPasswordResetRequests();
     if (adminCurrentViewMode === "gallery") {
       renderAdminSubmissionsGallery();
     } else {
@@ -6779,46 +6971,92 @@ window.handleZepRoundChange = function() {
   fetchZepQuizDataAndRender();
 };
 
-// 선택한 회차를 활성 회차로 스프레드시트에 영구 저장
+// 접수 중인 회차 라벨을 현재 상태에 맞춥니다. 잠금이면 색도 회색으로 바꿔
+// 열려 있는 상태와 한눈에 구분되게 합니다.
+function updateZepActiveLabel() {
+  const activeLabel = document.getElementById("admin-zep-active-label");
+  if (!activeLabel) return;
+  activeLabel.textContent = zepRoundLabel(currentActiveZepRound);
+  const locked = isZepQuizLocked();
+  activeLabel.style.color = locked ? "#9ca3af" : "#22c55e";
+  activeLabel.style.background = locked ? "rgba(156, 163, 175, 0.1)" : "rgba(34, 197, 94, 0.1)";
+  activeLabel.style.borderColor = locked ? "rgba(156, 163, 175, 0.2)" : "rgba(34, 197, 94, 0.2)";
+
+  const lockBtn = document.getElementById("admin-zep-lock-btn");
+  if (lockBtn) {
+    lockBtn.textContent = locked ? "🔓 젭퀴즈 잠금 해제" : "🔒 젭퀴즈 잠금";
+    lockBtn.style.background = locked ? "rgba(34, 197, 94, 0.15)" : "rgba(239, 68, 68, 0.15)";
+    lockBtn.style.borderColor = locked ? "rgba(34, 197, 94, 0.35)" : "rgba(239, 68, 68, 0.35)";
+    lockBtn.style.color = locked ? "#86efac" : "#fca5a5";
+  }
+}
+
+// 접수 중인 회차를 서버에 저장합니다. 회차 지정과 잠금이 같은 동작이라
+// (잠금은 존재하지 않는 회차 0 을 지정하는 것) 한 곳에서 처리합니다.
+async function applyActiveZepRound(roundNum, { busyText, doneText }) {
+  if (!GOOGLE_SHEET_API_URL) {
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+    return;
+  }
+  showToast(busyText, "info");
+  try {
+    const result = await callBackend({
+      action: "updateActiveZepRound",
+      activeRound: roundNum,
+      adminToken: getAdminToken()
+    });
+    if (result.status === "success") {
+      currentActiveZepRound = String(roundNum);
+      zepRoundLoaded = true;
+      updateZepActiveLabel();
+      renderContestGrid();
+      showToast(doneText, "success");
+    } else {
+      showToast("설정 실패: " + result.message, "error");
+    }
+  } catch (e) {
+    console.error(e);
+    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+  }
+}
+
+// 선택한 회차를 활성 회차로 영구 저장
 window.setAsActiveZepRound = async function() {
   const roundSelect = document.getElementById("admin-zep-round-select");
   if (!roundSelect) return;
-  
-  const selectedRound = roundSelect.value;
-  const roundNum = selectedRound.substring(8); // 'zepquiz_' 뒤의 숫자
-  
-  showToast(`${roundNum}회차를 학생 활성 회차로 설정하는 중...`, "info");
-  
-  if (GOOGLE_SHEET_API_URL) {
-    try {
-      const result = await callBackend({
-          action: "updateActiveZepRound",
-          activeRound: roundNum,
-          adminToken: getAdminToken()
-        });
-      if (result.status === "success") {
-        currentActiveZepRound = roundNum.toString();
-        
-        // UI 라벨 동기화
-        const activeLabel = document.getElementById("admin-zep-active-label");
-        if (activeLabel) {
-          activeLabel.textContent = `${currentActiveZepRound}회차`;
-        }
-        
-        // 학생 카드 그리드 새로 렌더링
-        renderContestGrid();
-        
-        showToast(`${roundNum}회차 젭퀴즈가 활성 회차로 설정되었습니다!`, "success");
-      } else {
-        showToast("설정 실패: " + result.message, "error");
-      }
-    } catch (e) {
-      console.error(e);
-      showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
-    }
-  } else {
-    showToast("네트워크 연결이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+
+  const roundNum = roundSelect.value.substring(8); // 'zepquiz_' 뒤의 숫자
+  await applyActiveZepRound(roundNum, {
+    busyText: `${roundNum}회차를 학생 활성 회차로 설정하는 중...`,
+    doneText: `${roundNum}회차 젭퀴즈가 활성 회차로 설정되었습니다!`
+  });
+};
+
+// 젭퀴즈 전체 잠금 / 해제
+window.toggleZepQuizLock = async function() {
+  if (isZepQuizLocked()) {
+    // 잠긴 상태로 페이지를 열면 회차 목록이 활성 회차와 동기화되지 않습니다
+    // (잠금에는 대응하는 회차가 없어서입니다). 그래서 어느 회차가 열리는지
+    // 분명히 보여 주고, 바꾸는 방법도 함께 알립니다.
+    const roundSelect = document.getElementById("admin-zep-round-select");
+    const roundNum = roundSelect ? roundSelect.value.substring(8) : "3";
+    if (!confirm(
+      `젭퀴즈 잠금을 풉니다.\n\n` +
+      `▶ ${roundNum}회차가 접수 중이 됩니다.\n\n` +
+      `다른 회차를 열려면 [취소]를 누르고, 왼쪽 회차 목록에서 원하는 회차를 고른 뒤 다시 눌러 주세요.`
+    )) return;
+    await applyActiveZepRound(roundNum, {
+      busyText: `젭퀴즈 잠금을 푸는 중...`,
+      doneText: `젭퀴즈 ${roundNum}회차가 열렸습니다.`
+    });
+    return;
   }
+
+  if (!confirm("젭퀴즈를 잠급니다.\n\n모든 회차가 마감되고 학생 화면에서 젭퀴즈 카드가 사라집니다.\n이미 제출된 기록은 그대로 남습니다.")) return;
+  await applyActiveZepRound(ZEPQUIZ_LOCKED, {
+    busyText: "젭퀴즈를 잠그는 중...",
+    doneText: "젭퀴즈가 잠겼습니다. 학생 화면에서 사라집니다."
+  });
 };
 
 // 젭퀴즈 데이터 로드 및 렌더러
@@ -7338,6 +7576,57 @@ function spawnCookieParticles() {
 // [관리자 인증] 하드코딩된 관리자 계정 식별자와 로그인 시 발급되는 세션 토큰 검증 헬퍼
 var ADMIN_USER_KEY = "5_1_27_김태호";
 
+// ====================================================
+// [Firebase 이전 이후] 비밀번호 초기화 — 이 스크립트가 맡는 유일한 일
+//
+// 학생 데이터는 전부 Firestore 로 옮겼습니다. 다만 "남의 비밀번호를 바꾸는 일"만은
+// 브라우저에서 할 수 없습니다. Firebase Auth 가 본인 세션이나 관리자 권한을
+// 요구하는데, 비밀번호를 잊은 학생에게는 둘 다 없기 때문입니다.
+// (Firebase 콘솔도 관리자가 비밀번호를 직접 지정하는 기능은 제공하지 않습니다)
+//
+// Cloud Functions 는 결제 계정이 필요해서, 이미 배포되어 있는 이 스크립트가
+// 그 한 가지만 대신합니다. 선생님이 승인할 때만 호출되며 학생 화면은 거치지 않습니다.
+// 초기화는 드문 작업이라 이 경로의 속도는 문제되지 않습니다.
+// ====================================================
+var FIREBASE_PROJECT_ID = "soro-migration-test";
+var TEMP_PASSWORD = "a1234567!";
+// 웹 API 키입니다. 원래 브라우저에 공개되는 값이라 비밀이 아닙니다.
+// 토큰이 누구 것인지 확인하는 용도로만 씁니다.
+var FIREBASE_WEB_API_KEY = "AIzaSyDe9QrX3PWh67cl9_B8LoM8Q6BOsJNLVf8";
+
+function sha1Hex(text) {
+  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_1, String(text), Utilities.Charset.UTF_8);
+  var hex = "";
+  for (var i = 0; i < bytes.length; i++) {
+    var b = bytes[i] < 0 ? bytes[i] + 256 : bytes[i];
+    var s = b.toString(16);
+    hex += (s.length === 1 ? "0" : "") + s;
+  }
+  return hex;
+}
+
+// 요청한 사람이 정말 관리자인지 Firebase 가 발급한 토큰으로 확인합니다.
+// 토큰은 위조할 수 없고, 구글에 직접 물어 누구인지 확인합니다.
+function verifyFirebaseAdmin(idToken) {
+  if (!idToken) return null;
+  try {
+    var res = UrlFetchApp.fetch(
+      "https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=" + FIREBASE_WEB_API_KEY, {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify({ idToken: idToken }),
+        muteHttpExceptions: true
+      });
+    var body = JSON.parse(res.getContentText());
+    if (!body.users || !body.users.length) return null;
+    var uid = body.users[0].localId;
+    return uid === sha1Hex(ADMIN_USER_KEY).slice(0, 28) ? uid : null;
+  } catch (e) {
+    Logger.log("관리자 토큰 확인 실패: " + e);
+    return null;
+  }
+}
+
 function isValidAdminToken(token) {
   if (!token) return false;
   try {
@@ -7347,6 +7636,53 @@ function isValidAdminToken(token) {
     return stored.token === token && Date.now() < stored.expires;
   } catch (e) {
     return false;
+  }
+}
+
+// ====================================================
+// [설정 확인용] 편집기에서 이 함수를 직접 실행해 주세요.
+//
+// 두 가지를 한 번에 합니다.
+//   1) 권한 승인 창을 띄웁니다 (배포만으로는 뜨지 않습니다 — 실제 실행이 있어야 뜹니다)
+//   2) Firebase 에 접근이 되는지 실제로 확인합니다
+//
+// 실행 방법: 편집기 상단 함수 목록에서 checkFirebaseAccess 를 고르고 ▷실행 을 누른 뒤,
+//           하단 "실행 로그"를 확인하세요.
+//           (편집기 함수 목록은 한글 이름을 못 잡는 경우가 있어 영문으로 두었습니다)
+// ====================================================
+function checkFirebaseAccess() {
+  var token;
+  try {
+    token = ScriptApp.getOAuthToken();
+  } catch (e) {
+    Logger.log("❌ 권한 토큰을 가져오지 못했습니다: " + e);
+    return;
+  }
+
+  // 실제 초기화가 쓰는 것과 같은 계열의 관리자 API 를, 읽기 전용으로만 호출해 봅니다.
+  // 존재하지 않는 계정을 조회하는 것이라 아무것도 바꾸지 않습니다.
+  var res = UrlFetchApp.fetch(
+    "https://identitytoolkit.googleapis.com/v1/projects/" + FIREBASE_PROJECT_ID + "/accounts:lookup",
+    {
+      method: "post",
+      contentType: "application/json",
+      payload: JSON.stringify({ localId: ["__권한확인용_없는계정__"] }),
+      headers: { Authorization: "Bearer " + token },
+      muteHttpExceptions: true
+    }
+  );
+  var code = res.getResponseCode();
+
+  if (code >= 200 && code < 300) {
+    Logger.log("✅ 준비 완료 — Firebase 프로젝트 '" + FIREBASE_PROJECT_ID + "' 에 접근할 수 있습니다.");
+    Logger.log("   이제 관리자 화면에서 비밀번호 초기화를 승인할 수 있습니다.");
+  } else if (code === 401 || code === 403) {
+    Logger.log("❌ 권한이 부족합니다 (" + code + ").");
+    Logger.log("   appsscript.json 에 cloud-platform 권한이 들어갔는지 확인하고,");
+    Logger.log("   이 함수를 다시 실행해 승인 창에서 허용해 주세요.");
+    Logger.log("   응답: " + res.getContentText().slice(0, 300));
+  } else {
+    Logger.log("❌ 예상치 못한 응답 (" + code + "): " + res.getContentText().slice(0, 300));
   }
 }
 
@@ -8167,6 +8503,42 @@ function doPost(e) {
 
     // 15. 감상 반응 토글 액션 (Reactions 시트)
     // 같은 학생이 같은 작품에 같은 종류의 반응을 이미 남겼다면 취소, 아니면 추가합니다.
+    // 16. [Firebase] 학생 비밀번호를 임시 비밀번호로 초기화
+    // 선생님이 승인할 때만 호출됩니다. 학생이 이 경로를 직접 부를 수는 없습니다.
+    else if (requestData.action === "resetStudentPassword") {
+      var adminUid = verifyFirebaseAdmin(requestData.idToken);
+      if (!adminUid) {
+        response = { status: "error", message: "관리자 권한이 필요합니다." };
+      } else if (!requestData.targetUid) {
+        response = { status: "error", message: "대상 학생이 지정되지 않았습니다." };
+      } else if (requestData.targetUid === adminUid) {
+        // 관리자 계정을 이 경로로 초기화하면 자기 자신을 잠글 수 있어 막습니다.
+        response = { status: "error", message: "관리자 계정은 이 방법으로 초기화할 수 없습니다." };
+      } else {
+        try {
+          var upd = UrlFetchApp.fetch(
+            "https://identitytoolkit.googleapis.com/v1/projects/" + FIREBASE_PROJECT_ID + "/accounts:update",
+            {
+              method: "post",
+              contentType: "application/json",
+              payload: JSON.stringify({ localId: requestData.targetUid, password: TEMP_PASSWORD }),
+              headers: { Authorization: "Bearer " + ScriptApp.getOAuthToken() },
+              muteHttpExceptions: true
+            }
+          );
+          var code = upd.getResponseCode();
+          if (code >= 200 && code < 300) {
+            response = { status: "success", tempPassword: TEMP_PASSWORD, message: "임시 비밀번호로 초기화했습니다." };
+          } else {
+            Logger.log("비밀번호 초기화 실패 " + code + ": " + upd.getContentText());
+            response = { status: "error", message: "초기화 실패 (" + code + "). 스크립트 권한 승인을 확인해 주세요." };
+          }
+        } catch (e) {
+          response = { status: "error", message: "초기화 중 오류: " + e.toString() };
+        }
+      }
+    }
+
     else if (requestData.action === "toggleReaction") {
       var ALLOWED_REACTIONS = ["read", "art", "heart"];
       var targetId = requestData.submissionId;
