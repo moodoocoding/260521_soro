@@ -7512,6 +7512,9 @@ var ADMIN_USER_KEY = "5_1_27_김태호";
 // ====================================================
 var FIREBASE_PROJECT_ID = "soro-migration-test";
 var TEMP_PASSWORD = "a1234567!";
+// 웹 API 키입니다. 원래 브라우저에 공개되는 값이라 비밀이 아닙니다.
+// 토큰이 누구 것인지 확인하는 용도로만 씁니다.
+var FIREBASE_WEB_API_KEY = "AIzaSyDe9QrX3PWh67cl9_B8LoM8Q6BOsJNLVf8";
 
 function sha1Hex(text) {
   var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_1, String(text), Utilities.Charset.UTF_8);
@@ -7529,13 +7532,13 @@ function sha1Hex(text) {
 function verifyFirebaseAdmin(idToken) {
   if (!idToken) return null;
   try {
-    var res = UrlFetchApp.fetch("https://identitytoolkit.googleapis.com/v1/accounts:lookup", {
-      method: "post",
-      contentType: "application/json",
-      payload: JSON.stringify({ idToken: idToken }),
-      headers: { Authorization: "Bearer " + ScriptApp.getOAuthToken() },
-      muteHttpExceptions: true
-    });
+    var res = UrlFetchApp.fetch(
+      "https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=" + FIREBASE_WEB_API_KEY, {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify({ idToken: idToken }),
+        muteHttpExceptions: true
+      });
     var body = JSON.parse(res.getContentText());
     if (!body.users || !body.users.length) return null;
     var uid = body.users[0].localId;
@@ -7555,6 +7558,53 @@ function isValidAdminToken(token) {
     return stored.token === token && Date.now() < stored.expires;
   } catch (e) {
     return false;
+  }
+}
+
+// ====================================================
+// [설정 확인용] 편집기에서 이 함수를 직접 실행해 주세요.
+//
+// 두 가지를 한 번에 합니다.
+//   1) 권한 승인 창을 띄웁니다 (배포만으로는 뜨지 않습니다 — 실제 실행이 있어야 뜹니다)
+//   2) Firebase 에 접근이 되는지 실제로 확인합니다
+//
+// 실행 방법: 편집기 상단 함수 목록에서 checkFirebaseAccess 를 고르고 ▷실행 을 누른 뒤,
+//           하단 "실행 로그"를 확인하세요.
+//           (편집기 함수 목록은 한글 이름을 못 잡는 경우가 있어 영문으로 두었습니다)
+// ====================================================
+function checkFirebaseAccess() {
+  var token;
+  try {
+    token = ScriptApp.getOAuthToken();
+  } catch (e) {
+    Logger.log("❌ 권한 토큰을 가져오지 못했습니다: " + e);
+    return;
+  }
+
+  // 실제 초기화가 쓰는 것과 같은 계열의 관리자 API 를, 읽기 전용으로만 호출해 봅니다.
+  // 존재하지 않는 계정을 조회하는 것이라 아무것도 바꾸지 않습니다.
+  var res = UrlFetchApp.fetch(
+    "https://identitytoolkit.googleapis.com/v1/projects/" + FIREBASE_PROJECT_ID + "/accounts:lookup",
+    {
+      method: "post",
+      contentType: "application/json",
+      payload: JSON.stringify({ localId: ["__권한확인용_없는계정__"] }),
+      headers: { Authorization: "Bearer " + token },
+      muteHttpExceptions: true
+    }
+  );
+  var code = res.getResponseCode();
+
+  if (code >= 200 && code < 300) {
+    Logger.log("✅ 준비 완료 — Firebase 프로젝트 '" + FIREBASE_PROJECT_ID + "' 에 접근할 수 있습니다.");
+    Logger.log("   이제 관리자 화면에서 비밀번호 초기화를 승인할 수 있습니다.");
+  } else if (code === 401 || code === 403) {
+    Logger.log("❌ 권한이 부족합니다 (" + code + ").");
+    Logger.log("   appsscript.json 에 cloud-platform 권한이 들어갔는지 확인하고,");
+    Logger.log("   이 함수를 다시 실행해 승인 창에서 허용해 주세요.");
+    Logger.log("   응답: " + res.getContentText().slice(0, 300));
+  } else {
+    Logger.log("❌ 예상치 못한 응답 (" + code + "): " + res.getContentText().slice(0, 300));
   }
 }
 
