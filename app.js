@@ -7686,6 +7686,56 @@ function checkFirebaseAccess() {
   }
 }
 
+// ====================================================
+// [1회용] 선생님 계정에 관리자 표시를 붙입니다.
+//
+// 보안 규칙은 "본인이 자기 문서에 admin 을 붙이는 것"을 막습니다.
+// 학생이 스스로 관리자가 되는 걸 막으려고 그렇게 만들었는데, 그래서
+// 선생님도 앱 안에서는 스스로 관리자가 될 수 없습니다.
+// 프로젝트 소유자 권한으로 부르는 Firestore 는 규칙을 거치지 않으므로
+// 여기서 한 번 넣어 주면 됩니다.
+//
+// 실행 방법: 편집기 상단 함수 목록에서 grantAdminToTeacher 를 고르고 ▷실행.
+//           끝나면 사이트에서 로그아웃 후 다시 로그인해야 반영됩니다
+//           (관리자 토큰은 로그인할 때 발급됩니다).
+//
+// 이 함수는 doPost 에 연결되어 있지 않아 웹으로는 호출할 수 없습니다.
+// 편집기에서 소유자만 직접 실행할 수 있습니다.
+// ====================================================
+function grantAdminToTeacher() {
+  var uid = "9009084b5e62077445ee99bc1169"; // 5학년 1반 27번 김태호
+
+  // updateMask 를 반드시 붙입니다. 없으면 PATCH 가 문서 전체를 덮어써서
+  // 학년·반·번호·이름이 통째로 날아갑니다.
+  var url = "https://firestore.googleapis.com/v1/projects/" + FIREBASE_PROJECT_ID +
+            "/databases/(default)/documents/users/" + uid +
+            "?updateMask.fieldPaths=admin";
+
+  var res = UrlFetchApp.fetch(url, {
+    method: "patch",
+    contentType: "application/json",
+    payload: JSON.stringify({ fields: { admin: { booleanValue: true } } }),
+    headers: { Authorization: "Bearer " + ScriptApp.getOAuthToken() },
+    muteHttpExceptions: true
+  });
+
+  var code = res.getResponseCode();
+  if (code >= 200 && code < 300) {
+    var doc = JSON.parse(res.getContentText());
+    var f = doc.fields || {};
+    Logger.log("✅ 관리자 표시를 붙였습니다.");
+    Logger.log("   대상: " + (f.name ? f.name.stringValue : "?") + " (" +
+               (f.grade ? f.grade.integerValue : "?") + "학년 " +
+               (f.classNum ? f.classNum.integerValue : "?") + "반 " +
+               (f.number ? f.number.integerValue : "?") + "번)");
+    Logger.log("   admin = " + (f.admin ? f.admin.booleanValue : "(없음)"));
+    Logger.log("");
+    Logger.log("   이제 사이트에서 로그아웃 후 다시 로그인하세요.");
+  } else {
+    Logger.log("❌ 실패 (" + code + "): " + res.getContentText().slice(0, 400));
+  }
+}
+
 function doPost(e) {
   var response = { status: "error", message: "알 수 없는 요청" };
   
