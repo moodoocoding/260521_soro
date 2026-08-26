@@ -1,0 +1,152 @@
+rules_version = '2';
+
+// ============================================================
+// SORO 공모전 - Firestore 보안 규칙
+//
+// 지금 Apps Script 백엔드에서 손으로 짜 넣은 검증들을, 데이터베이스가
+// 직접 강제하도록 옮긴 것입니다. 클라이언트 코드를 어떻게 조작하든
+// 여기서 막히면 데이터는 바뀌지 않습니다.
+//
+// 특히 지금 구조로는 못 막던 것 하나가 여기서 해결됩니다:
+//   "다른 학생을 사칭한 제출" — 예전에는 Users 시트에 그 조합이 있는지만
+//   확인할 수 있어서, 갤러리에 노출된 남의 학년/반/이름을 그대로 베껴
+//   보내면 통과했습니다. 이제는 로그인한 본인(request.auth.uid)이 아니면
+//   애초에 문서를 쓸 수 없습니다.
+// ============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- 공통 판별 ----------
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // 관리자는 하드코딩된 학번이 아니라 Auth 커스텀 클레임으로 판별합니다.
+    // (예전: 5학년 1반 27번 김태호인지 값 비교 → 위조 가능)
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function settingValue(key) {
+      return get(/databases/$(database)/documents/settings/$(key)).data.value;
+    }
+
+    function settingExists(key) {
+      return exists(/databases/$(database)/documents/settings/$(key));
+    }
+
+    // 공모전이 접수를 받는 중인지.
+    // 잠금이 명시적으로 false일 때만 열린 것으로 봅니다. 설정이 없으면 닫힘.
+    function contestUnlocked(contestId) {
+      return settingExists('contest_lock_' + contestId)
+             && settingValue('contest_lock_' + contestId) == false;
+    }
+
+    // 젭퀴즈는 잠금이 아니라 "지금 진행 중인 회차"로 판단합니다.
+    function isActiveZepRound(contestId) {
+      return settingExists('zepquiz_active_round')
+             && contestId == 'zepquiz_' + string(settingValue('zepquiz_active_round'));
+    }
+
+    function contestAcceptsEntries(contestId) {
+      return contestId.matches('^zepquiz_.*')
+             ? isActiveZepRound(contestId)
+             : contestUnlocked(contestId);
+    }
+
+    // ---------- 학생 프로필 ----------
+    // 비밀번호는 Firebase Auth가 관리하므로 여기엔 없습니다.
+
+    match /users/{uid} {
+      // 갤러리에서 이름을 보여줘야 하므로 로그인한 사용자는 읽을 수 있습니다.
+      allow read: if isSignedIn();
+
+      // 가입: 자기 문서만, 그리고 uid가 본인이어야 합니다.
+      allow create: if isOwner(uid)
+                    && request.resource.data.keys().hasAll(['grade', 'classNum', 'number', 'name'])
+                    && request.resource.data.grade is int
+                    && request.resource.data.classNum is int
+                    && request.resource.data.number is int
+                    && request.resource.data.name is string;
+
+      // 본인 프로필 수정은 가능하되, 관리자 표시는 스스로 붙일 수 없습니다.
+      allow update: if (isOwner(uid) && !('admin' in request.resource.data)) || isAdmin();
+
+      allow delete: if isAdmin();
+    }
+
+    // ---------- 제출물 ----------
+    // 문서 ID를 "<공모전ID>__<uid>"로 고정합니다. 그래서
+    //   · 한 학생이 한 공모전에 하나만 낼 수 있는 게 DB 차원에서 보장되고
+    //   · 다시 제출해도 같은 문서를 덮어써서 받은 반응이 사라지지 않습니다
+    //     (예전에는 취소 후 재제출하면 id가 바뀌어 반응이 날아갔습니다)
+
+    match /submissions/{submissionId} {
+      // 갤러리·전자화랑이 로그인 없이도 보여야 해서 공개 읽기입니다.
+      // ※ 학생 이름이 그대로 노출되는 건 지금 Apps Script 구조와 동일합니다.
+      //    더 가리려면 공개용 사본 컬렉션을 따로 두어야 하며, 별도 결정 사항입니다.
+      allow read: if true;
+
+      allow create: if isOwner(request.resource.data.uid)
+                    && submissionId == request.resource.data.contestId + '__' + request.auth.uid
+                    && contestAcceptsEntries(request.resource.data.contestId)
+                    // 심사용 항목은 학생이 스스로 붙일 수 없습니다.
+                    && !request.resource.data.keys().hasAny(['isStarred', 'prizeStatus', 'award']);
+
+      // 본인이 다시 제출(덮어쓰기)하는 경우 — 접수 중일 때만.
+      // 소유자와 공모전은 바꿀 수 없습니다.
+      allow update: if isAdmin()
+                    || (isOwner(resource.data.uid)
+                        && contestAcceptsEntries(resource.data.contestId)
+                        && request.resource.data.uid == resource.data.uid
+                        && request.resource.data.contestId == resource.data.contestId
+                        && !request.resource.data.diff(resource.data)
+                             .affectedKeys()
+                             .hasAny(['isStarred', 'prizeStatus', 'award']));
+
+      allow delete: if isAdmin() || isOwner(resource.data.uid);
+    }
+
+    // ---------- 감상 반응 ----------
+    // 문서 ID를 "<제출물ID>__<uid>__<종류>"로 고정해서
+    // 같은 사람이 같은 작품에 같은 반응을 두 번 남기는 걸 DB가 막습니다.
+
+    match /reactions/{reactionId} {
+      allow read: if true;
+
+      allow create: if isSignedIn()
+                    && isOwner(request.resource.data.uid)
+                    && reactionId == request.resource.data.submissionId
+                                     + '__' + request.auth.uid
+                                     + '__' + request.resource.data.type
+                    && request.resource.data.type in ['read', 'art', 'heart']
+                    // 자기 작품에는 반응할 수 없습니다.
+                    && !request.resource.data.submissionId.matches('.*__' + request.auth.uid + '$');
+
+      // 반응은 수정하지 않고 누르거나(생성) 취소(삭제)만 합니다.
+      allow update: if false;
+      allow delete: if isOwner(resource.data.uid) || isAdmin();
+    }
+
+    // ---------- 설정 ----------
+    // 공모전 개폐, 활성 회차, 학급별 과자 지급 등
+
+    match /settings/{key} {
+      // 학생 화면이 공모전 상태를 알아야 하므로 공개 읽기입니다.
+      allow read: if true;
+      // 쓰기는 오직 관리자.
+      allow write: if isAdmin();
+    }
+
+    // ---------- 그 외 전부 차단 ----------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

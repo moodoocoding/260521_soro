@@ -14,6 +14,23 @@
   
   <!-- Main Stylesheet -->
   <link rel="stylesheet" href="style.css?v=1.4.0">
+
+  <!-- Firestore 백엔드 (?backend=firebase 일 때만 불러옵니다).
+       평소에는 내려받지도 않으므로 기존 사용자에게 영향이 없습니다. -->
+  <script>
+    (function () {
+      try {
+        var q = new URLSearchParams(location.search).get("backend");
+        if (q === "firebase" || q === "sheets") localStorage.setItem("soro_backend", q);
+        if ((localStorage.getItem("soro_backend") || "sheets") === "firebase") {
+          var s = document.createElement("script");
+          s.type = "module";
+          s.src = "firebase-backend.js?v=1";
+          document.head.appendChild(s);
+        }
+      } catch (e) { /* 저장소 접근 불가 시 기존 백엔드 유지 */ }
+    })();
+  </script>
 </head>
 <body class="dark-theme">
   <!-- Dynamic Noise Overlay for aesthetic texture -->

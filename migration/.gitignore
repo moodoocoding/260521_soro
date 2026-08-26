@@ -1,0 +1,5 @@
+# 실제 학생 데이터가 담긴 산출물은 커밋하지 않습니다.
+export/
+build/
+*.csv
+test-users.json
