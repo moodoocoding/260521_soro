@@ -49,8 +49,8 @@ for (const r of rows) {
 
   const uid = uidOf(userKey);
 
-  // 새 규칙은 자기 작품에 반응하는 걸 막습니다. 옛 데이터에 그런 게 있으면 제외합니다.
-  if (ownerOf.get(newSubId) === uid) { selfReact++; continue; }
+  // 자기 작품에 남긴 반응도 그대로 옮깁니다. (실제 반응의 16%를 차지하는 자연스러운 사용 패턴)
+  if (ownerOf.get(newSubId) === uid) selfReact++;
 
   const docId = `${newSubId}__${uid}__${type}`;
   if (out.has(docId)) { dupe++; continue; }     // 같은 반응 중복 행
@@ -63,5 +63,5 @@ console.log(`반응 원본 ${rows.length}행`);
 console.log(`  → 옮길 문서 ${out.size}개`);
 console.log(`  → 중복 행 제외: ${dupe}건 (새 구조에서는 애초에 생길 수 없음)`);
 console.log(`  → 대상 작품이 사라져 제외: ${orphan}건`);
-if (selfReact) console.log(`  → 자기 작품에 남긴 반응이라 제외: ${selfReact}건`);
+if (selfReact) console.log(`  → 그중 자기 작품에 남긴 반응: ${selfReact}건 (제외하지 않고 함께 옮김)`);
 if (badType) console.log(`  → 알 수 없는 종류라 제외: ${badType}건`);
