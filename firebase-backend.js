@@ -51,6 +51,19 @@ const uidOf   = async userKey => (await sha("SHA-1", userKey)).slice(0, 28);
 //
 // 그래서 uidOf(userKey) → 실제 uid 를 알려 주는 작은 색인을 둡니다.
 // 이 색인은 선생님이 초기화를 승인할 때만 읽습니다.
+// uidOf(userKey) 로 계산한 값을 실제 계정 uid 로 바꿔 줍니다.
+// 색인이 있으면 이전 이후에 가입한 학생이고, 없으면 이전해 온 학생이라
+// 계산값이 곧 실제 uid 입니다.
+async function realUidFor(hashedUid) {
+  try {
+    const idx = await getDoc(doc(db, "accountIndex", hashedUid));
+    if (idx.exists() && idx.data().uid) return idx.data().uid;
+  } catch (e) {
+    // 색인을 못 읽으면(권한 없음 등) 이전해 온 계정으로 봅니다.
+  }
+  return hashedUid;
+}
+
 async function ensureAccountIndex(userKey, realUid) {
   try {
     const key = await uidOf(userKey);
@@ -205,8 +218,10 @@ const actions = {
   async getReactions({ studentUsername }) {
     const snap = await getDocs(collection(db, "reactions"));
     const counts = {}, mine = {};
-    let myUid = null;
-    if (studentUsername) myUid = await uidOf(studentUsername);
+    // 반응은 실제 계정 uid 로 저장됩니다. 예전에는 여기서 uidOf(studentUsername) 으로
+    // 비교해서, 이전 이후에 가입한 학생은 자기가 누른 하트가 눌리지 않은 것처럼
+    // 보였습니다. 로그인해 있으면 실제 uid 가 확실하므로 그것을 씁니다.
+    const myUid = auth.currentUser ? auth.currentUser.uid : null;
     snap.forEach(d => {
       const r = d.data();
       counts[r.submissionId] = counts[r.submissionId] || {};
@@ -333,10 +348,14 @@ const actions = {
     // Auth 계정 삭제는 관리자 SDK 가 필요해 여기서는 못 합니다.
     // 프로필과 제출물만 지우고, 그 사실을 분명히 알립니다.
     try {
-      const uid = await uidOf(userKey);
+      // 이전 이후에 가입한 학생은 계산한 uid 가 실제 uid 와 달라서, 예전에는
+      // 삭제를 눌러도 아무것도 지워지지 않고 "삭제했습니다" 만 떴습니다.
+      const hashed = await uidOf(userKey);
+      const uid = await realUidFor(hashed);
       const subs = await getDocs(query(collection(db, "submissions"), where("uid", "==", uid)));
       await Promise.all(subs.docs.map(d => deleteDoc(d.ref)));
       await deleteDoc(doc(db, "users", uid));
+      await deleteDoc(doc(db, "accountIndex", hashed)).catch(() => {});
       return ok({ message: `제출물 ${subs.size}건과 프로필을 삭제했습니다. (로그인 계정 자체는 Firebase 콘솔에서 지워야 합니다)` });
     } catch (e) {
       return fail("관리자 권한이 필요합니다.");
@@ -428,13 +447,7 @@ const actions = {
     // targetUid 는 요청 문서의 id, 즉 uidOf(userKey) 입니다.
     // 이전해 온 학생은 이 값이 곧 실제 uid 지만, 이후 가입한 학생은 다릅니다.
     // 그 경우 accountIndex 가 실제 uid 를 알려 줍니다.
-    let realUid = targetUid;
-    try {
-      const idx = await getDoc(doc(db, "accountIndex", targetUid));
-      if (idx.exists() && idx.data().uid) realUid = idx.data().uid;
-    } catch (e) {
-      // 색인이 없으면 이전해 온 계정이므로 targetUid 가 실제 uid 입니다.
-    }
+    const realUid = await realUidFor(targetUid);
 
     let res;
     try {
