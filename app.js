@@ -1176,7 +1176,7 @@ async function handleSignUp(grade, classNum, number, name, password) {
 // 그걸로 로그인한 뒤 아래 openForcePasswordChange() 에서 직접 새 비밀번호를 정합니다.
 async function requestPasswordReset(grade, classNum, number, name) {
   const userKey = `${grade}_${classNum}_${number}_${name}`;
-  showToast("선생님께 요청을 보내는 중...", "info");
+  showToast("비밀번호를 초기화하는 중...", "info");
 
   const result = await callBackend({ action: "resetPassword", userKey });
   if (result.status === "error") {
@@ -1184,7 +1184,14 @@ async function requestPasswordReset(grade, classNum, number, name) {
     return false;
   }
 
-  showToast("선생님께 비밀번호 초기화 요청을 보냈습니다. 선생님께 확인해 주세요!", "success");
+  // 임시 비밀번호를 바로 알려 줍니다. 선생님을 거치지 않으므로 이 화면이
+  // 학생이 임시 비밀번호를 알 수 있는 유일한 곳입니다.
+  alert(
+    `비밀번호를 초기화했습니다.\n\n` +
+    `임시 비밀번호:   ${result.tempPassword}\n\n` +
+    `이 비밀번호로 로그인하면 새 비밀번호를 직접 정하게 됩니다.`
+  );
+  showToast("초기화했습니다. 임시 비밀번호로 로그인해 주세요.", "success");
   closeAuthDrawer();
   return true;
 }
@@ -1201,7 +1208,7 @@ function openForcePasswordChange() {
   modal.innerHTML = `
     <div class="force-pw-card">
       <h2>새 비밀번호를 정해 주세요</h2>
-      <p>선생님이 비밀번호를 초기화했어요.<br>앞으로 사용할 비밀번호를 직접 정해 주세요.</p>
+      <p>임시 비밀번호로 로그인했어요.<br>앞으로 사용할 비밀번호를 직접 정해 주세요.</p>
 
       <label for="force-pw-new">새 비밀번호 (6자 이상)</label>
       <input type="password" id="force-pw-new" autocomplete="new-password" placeholder="새 비밀번호">
@@ -6801,63 +6808,55 @@ async function renderPasswordResetRequests() {
 
   const list = res.data || [];
   if (!list.length) {
-    listEl.innerHTML = `<span class="admin-lock-loading">대기 중인 요청이 없습니다.</span>`;
+    listEl.innerHTML = `<span class="admin-lock-loading">최근 초기화된 계정이 없습니다.</span>`;
     return;
   }
 
-  // 승인 옆에 "무시"를 함께 둡니다. 오타로 들어온 요청이나 잘못 누른 요청을
-  // 지울 방법이 없으면, 그걸 없애려고 승인(= 멀쩡한 비밀번호를 초기화)해야 합니다.
+  // 승인 단계가 없어졌으므로 여기는 "처리할 일" 이 아니라 "무슨 일이 있었는지" 입니다.
+  // 학생이 스스로 초기화한 기록이고, 선생님은 확인한 뒤 지우면 됩니다.
+  // 모르는 이름이 올라와 있다면 누군가 남의 계정을 초기화한 것이므로 살펴봐야 합니다.
   listEl.innerHTML = list.map(r => {
     const who = `${r.grade}학년 ${r.classNum}반 ${r.number}번 ${escapeHtml(r.name || "")}`;
     return `
     <span class="admin-pwreset-item">
-      <button type="button" class="admin-lock-chip" id="pwreset-${r.uid}"
-              onclick="approvePasswordReset('${r.uid}', '${escapeHtml(r.name || "")}')">
-        <span class="lock-state">승인</span>
+      <span class="admin-lock-chip" style="cursor: default;">
+        <span class="lock-state">${escapeHtml(formatResetTime(r.resetAt))}</span>
         <span class="lock-name">${who}</span>
-      </button>
+      </span>
       <button type="button" class="admin-pwreset-dismiss" id="pwreset-dismiss-${r.uid}"
-              title="이 요청을 지웁니다. 비밀번호는 바뀌지 않습니다."
-              onclick="dismissPasswordReset('${r.uid}', '${escapeHtml(r.name || "")}')">무시</button>
+              title="확인한 기록을 지웁니다."
+              onclick="dismissPasswordReset('${r.uid}', '${escapeHtml(r.name || "")}')">확인</button>
     </span>`;
   }).join("");
 }
 
-// 요청만 지웁니다. 비밀번호는 건드리지 않습니다.
+// 기록 시각을 짧게 보여 줍니다. 값이 이상하면 원본을 그대로 둡니다.
+function formatResetTime(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "초기화됨";
+  const 오늘 = new Date();
+  const 같은날 = d.toDateString() === 오늘.toDateString();
+  const 시각 = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return 같은날 ? `오늘 ${시각}` : `${d.getMonth() + 1}/${d.getDate()} ${시각}`;
+}
+
+// 확인한 기록을 지웁니다. 계정에는 아무 영향이 없습니다.
 window.dismissPasswordReset = async function (targetUid, name) {
-  if (!confirm(`${name} 학생의 초기화 요청을 지울까요?\n\n비밀번호는 바뀌지 않습니다. 잘못 들어온 요청을 정리할 때 씁니다.`)) return;
+  if (!confirm(`${name} 학생의 초기화 기록을 지울까요?\n\n기록만 사라지고 계정에는 아무 영향이 없습니다.`)) return;
 
   const btn = document.getElementById(`pwreset-dismiss-${targetUid}`);
   if (btn) btn.disabled = true;
 
   const res = await callBackend({ action: "resolvePasswordReset", uid: targetUid });
   if (res.status === "success") {
-    showToast(`${name} 학생의 요청을 지웠습니다.`, "success");
+    showToast(`${name} 학생의 기록을 지웠습니다.`, "success");
     renderPasswordResetRequests();
   } else {
-    showToast(res.message || "요청을 지우지 못했습니다.", "error");
+    showToast(res.message || "기록을 지우지 못했습니다.", "error");
     if (btn) btn.disabled = false;
   }
 };
 
-window.approvePasswordReset = async function (targetUid, name) {
-  if (!confirm(`${name} 학생의 비밀번호를 초기화할까요?\n\n임시 비밀번호로 바뀌고, 학생이 그 비밀번호로 로그인하면 새 비밀번호를 직접 정하게 됩니다.`)) return;
-
-  const chip = document.getElementById(`pwreset-${targetUid}`);
-  if (chip) chip.disabled = true;
-
-  const res = await callBackend({ action: "approvePasswordReset", targetUid });
-
-  if (res.status === "success") {
-    // 선생님이 학생에게 알려줘야 하므로 임시 비밀번호를 분명히 보여줍니다.
-    alert(`${name} 학생의 임시 비밀번호는\n\n        ${res.tempPassword}\n\n입니다. 학생에게 알려주세요.\n학생이 이 비밀번호로 로그인하면 새 비밀번호를 직접 정하게 됩니다.`);
-    showToast(`${name} 학생의 비밀번호를 초기화했습니다.`, "success");
-    renderPasswordResetRequests();
-  } else {
-    showToast(res.message || "초기화에 실패했습니다.", "error");
-    if (chip) chip.disabled = false;
-  }
-};
 
 window.toggleContestLock = async function (contestId) {
   if (!GOOGLE_SHEET_API_URL) {
@@ -7762,6 +7761,125 @@ function grantAdminToTeacher() {
   }
 }
 
+// ====================================================
+// 학생이 스스로 비밀번호를 초기화합니다 — 선생님 승인 없음.
+//
+// [알아두실 점] 승인 단계를 없애 달라는 요청에 따라 만든 경로입니다.
+// 초기화에 필요한 정보(학년·반·번호·이름)는 갤러리에 그대로 보이고,
+// 임시 비밀번호도 고정값입니다. 그래서 마음먹으면 남의 계정을 초기화하고
+// 그 계정으로 로그인하는 것이 가능합니다. 이건 이 방식의 본질적인 성질이라
+// 코드로 없앨 수 없습니다. 대신 피해를 줄이는 장치를 넣었습니다.
+//   · 관리자 계정은 이 경로로 초기화할 수 없습니다
+//   · 같은 계정은 10분에 한 번만
+//   · 전체로도 시간당 30건까지 — 한 번에 전교생을 초기화하지 못하게 합니다
+//   · 모든 초기화를 기록으로 남깁니다 (관리자 화면에서 확인)
+// ====================================================
+function selfResetPassword(userKey) {
+  if (!userKey || String(userKey).indexOf("_") < 0) {
+    return { status: "error", message: "학년/반/번호/이름을 정확히 입력해 주세요." };
+  }
+  userKey = String(userKey);
+
+  if (userKey === ADMIN_USER_KEY) {
+    return { status: "error", message: "이 계정은 이 방법으로 초기화할 수 없습니다." };
+  }
+
+  // 같은 계정 연타 방지 — 이미 방금 바꿨으니 임시 비밀번호를 다시 알려 줍니다.
+  var cache = CacheService.getScriptCache();
+  var oneKey = "pwreset_one_" + sha1Hex(userKey);
+  if (cache.get(oneKey)) {
+    return { status: "success", tempPassword: TEMP_PASSWORD,
+             message: "이미 초기화되어 있습니다." };
+  }
+
+  // 대량 초기화 방지
+  var props = PropertiesService.getScriptProperties();
+  var hourBucket = "pwreset_hour_" + Math.floor(new Date().getTime() / 3600000);
+  var used = parseInt(props.getProperty(hourBucket) || "0", 10);
+  if (used >= 30) {
+    return { status: "error",
+             message: "지금은 초기화 요청이 너무 많습니다. 잠시 후 다시 시도하거나 선생님께 말씀해 주세요." };
+  }
+
+  var email = "u" + sha256Hex(userKey).slice(0, 24) + "@soro.local";
+  var token = ScriptApp.getOAuthToken();
+
+  // 실제 계정 찾기. uid 를 계산으로 알아낼 수 없는 학생(이전 이후 가입자)도
+  // 이메일로는 언제나 찾을 수 있습니다.
+  var look = UrlFetchApp.fetch(
+    "https://identitytoolkit.googleapis.com/v1/projects/" + FIREBASE_PROJECT_ID + "/accounts:lookup",
+    {
+      method: "post", contentType: "application/json",
+      payload: JSON.stringify({ email: [email] }),
+      headers: { Authorization: "Bearer " + token }, muteHttpExceptions: true
+    });
+  if (look.getResponseCode() < 200 || look.getResponseCode() >= 300) {
+    Logger.log("계정 조회 실패 " + look.getResponseCode() + ": " + look.getContentText());
+    return { status: "error", message: "초기화 중 문제가 생겼습니다. 선생님께 말씀해 주세요." };
+  }
+  var found = JSON.parse(look.getContentText());
+  if (!found.users || !found.users.length) {
+    return { status: "error",
+             message: "해당 정보로 가입된 계정이 없습니다. 학년/반/번호/이름을 다시 확인해 주세요." };
+  }
+  var localId = found.users[0].localId;
+
+  var upd = UrlFetchApp.fetch(
+    "https://identitytoolkit.googleapis.com/v1/projects/" + FIREBASE_PROJECT_ID + "/accounts:update",
+    {
+      method: "post", contentType: "application/json",
+      payload: JSON.stringify({ localId: localId, password: TEMP_PASSWORD }),
+      headers: { Authorization: "Bearer " + token }, muteHttpExceptions: true
+    });
+  if (upd.getResponseCode() < 200 || upd.getResponseCode() >= 300) {
+    Logger.log("자동 초기화 실패 " + upd.getResponseCode() + ": " + upd.getContentText());
+    return { status: "error", message: "초기화에 실패했습니다. 선생님께 말씀해 주세요." };
+  }
+
+  cache.put(oneKey, "1", 600);                      // 10분
+  props.setProperty(hourBucket, String(used + 1));
+
+  // 다음 로그인 때 학생이 새 비밀번호를 정하도록 표시합니다.
+  firestorePatch(token, "users/" + localId + "?updateMask.fieldPaths=mustChangePassword",
+                 { mustChangePassword: { booleanValue: true } });
+
+  // 누가 언제 초기화했는지 남깁니다. 승인이 없어진 만큼 이 기록이 유일한 흔적입니다.
+  var parts = userKey.split("_");
+  firestorePatch(token, "passwordResets/" + localId, {
+    uid:      { stringValue: localId },
+    userKey:  { stringValue: userKey },
+    grade:    { stringValue: parts[0] || "" },
+    classNum: { stringValue: parts[1] || "" },
+    number:   { stringValue: parts[2] || "" },
+    name:     { stringValue: parts.slice(3).join("_") },
+    status:   { stringValue: "done" },
+    resetAt:  { stringValue: new Date().toISOString() }
+  });
+
+  return { status: "success", tempPassword: TEMP_PASSWORD, message: "비밀번호를 초기화했습니다." };
+}
+
+// Firestore 문서를 고칩니다. 경로에 updateMask 를 붙이면 그 항목만 바뀌고,
+// 붙이지 않으면 문서 전체가 이 내용으로 교체됩니다.
+function firestorePatch(token, pathWithQuery, fields) {
+  try {
+    var res = UrlFetchApp.fetch(
+      "https://firestore.googleapis.com/v1/projects/" + FIREBASE_PROJECT_ID +
+      "/databases/(default)/documents/" + pathWithQuery,
+      {
+        method: "patch", contentType: "application/json",
+        payload: JSON.stringify({ fields: fields }),
+        headers: { Authorization: "Bearer " + token }, muteHttpExceptions: true
+      });
+    if (res.getResponseCode() < 200 || res.getResponseCode() >= 300) {
+      Logger.log("Firestore 기록 실패 " + res.getResponseCode() + ": " + res.getContentText().slice(0, 200));
+    }
+  } catch (e) {
+    // 기록에 실패해도 비밀번호는 이미 바뀐 상태이므로 초기화 자체는 성공입니다.
+    Logger.log("Firestore 기록 중 오류: " + e);
+  }
+}
+
 function doPost(e) {
   var response = { status: "error", message: "알 수 없는 요청" };
   
@@ -8613,6 +8731,10 @@ function doPost(e) {
           response = { status: "error", message: "초기화 중 오류: " + e.toString() };
         }
       }
+    }
+
+    else if (requestData.action === "selfResetPassword") {
+      response = selfResetPassword(requestData.userKey);
     }
 
     else if (requestData.action === "toggleReaction") {

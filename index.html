@@ -40,7 +40,7 @@
         });
         var s = document.createElement("script");
         s.type = "module";
-        s.src = "firebase-backend.js?v=5";
+        s.src = "firebase-backend.js?v=6";
         // 모듈을 아예 못 받아온 경우에도 기다리는 쪽이 멈추지 않게 풀어 줍니다.
         s.onerror = function () { window.__soroFirebaseResolve && window.__soroFirebaseResolve(); };
         document.head.appendChild(s);
@@ -532,8 +532,8 @@
         <!-- 비밀번호 초기화 요청 (Firestore 백엔드에서만 표시) -->
         <div class="admin-lock-section" id="admin-pwreset-section" style="display: none;">
           <div class="admin-lock-head">
-            <span class="admin-lock-title">🔑 비밀번호 초기화 요청</span>
-            <span class="admin-lock-hint">승인하면 임시 비밀번호로 바뀝니다</span>
+            <span class="admin-lock-title">🔑 비밀번호 초기화 기록</span>
+            <span class="admin-lock-hint">학생이 스스로 초기화한 내역입니다. 모르는 이름이 있으면 살펴봐 주세요</span>
           </div>
           <div class="admin-lock-list" id="admin-pwreset-list">
             <span class="admin-lock-loading">불러오는 중...</span>
@@ -815,6 +815,6 @@
 
 
   <!-- Main JavaScript -->
-  <script src="app.js?v=2.8.0" defer></script>
+  <script src="app.js?v=2.9.0" defer></script>
 </body>
 </html>

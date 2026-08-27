@@ -382,39 +382,27 @@ const actions = {
   // 그래서 "학생이 요청 → 선생님이 처리" 방식으로 만들었습니다.
   async resetPassword({ userKey }) {
     if (!userKey) return fail("학년/반/번호/이름을 정확히 입력해 주세요.");
-    const uid = await uidOf(userKey);
 
-    // [주의] 여기서 users 문서를 읽어 계정 존재를 확인하면 안 됩니다.
-    // 이 기능을 쓰는 학생은 비밀번호를 잊어 로그인을 못 하는 상태이고,
-    // users 는 본인이나 관리자만 읽을 수 있어 반드시 permission-denied 가 납니다.
-    // 계정이 실제로 있는지는 보안 규칙의 exists(users/{uid}) 가 대신 확인합니다.
-    //
-    // 표시용 학년/반/번호/이름도 프로필 대신 userKey 에서 뽑습니다.
-    // userKey 는 학생이 방금 입력한 값이라 조회가 필요 없습니다.
-    const parts = String(userKey).split("_");
-    const num = v => { const n = parseInt(v, 10); return Number.isNaN(n) ? null : n; };
-
+    // 선생님 승인 없이 바로 초기화합니다.
+    // 비밀번호 변경에는 관리자 권한이 필요한데 브라우저에는 없으므로,
+    // 소유자 권한을 가진 Apps Script 가 대신 처리합니다.
+    // 실제 계정은 Apps Script 가 이메일로 찾습니다 — 로그인하지 못한 학생도
+    // 자기 uid 를 알 필요가 없습니다.
     try {
-      await setDoc(doc(db, "passwordResets", uid), {
-        uid,
-        userKey,
-        grade: num(parts[0]),
-        classNum: num(parts[1]),
-        number: num(parts[2]),
-        name: parts.slice(3).join("_"),   // 이름에 _ 가 있어도 잃지 않도록
-        status: "pending",
-        requestedAt: new Date().toISOString()
+      const r = await fetch(SHEETS_HELPER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: JSON.stringify({ action: "selfResetPassword", userKey })
       });
-      return ok({ message: "초기화를 요청했습니다. 선생님께 말씀드리면 임시 비밀번호를 알려주십니다." });
+      const res = await r.json();
+      if (res.status !== "success") return fail(res.message || "초기화에 실패했습니다.");
+      return ok({ tempPassword: res.tempPassword, message: res.message });
     } catch (e) {
-      // 규칙의 exists() 에 걸린 경우입니다. 오타이거나 가입하지 않은 정보입니다.
-      if (e && e.code === "permission-denied") {
-        return fail("해당 정보로 가입된 계정이 없습니다. 학년/반/번호/이름을 다시 확인해 주세요.");
-      }
-      return fail("요청을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.");
+      return fail("초기화 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.");
     }
   },
 
+  // 관리자: 초기화 기록 읽기 (예전에는 승인 대기 목록이었습니다)
   async getPasswordResets() {
     try {
       const snap = await getDocs(collection(db, "passwordResets"));
@@ -426,7 +414,7 @@ const actions = {
     }
   },
 
-  // 관리자: 처리 완료(요청 삭제)
+  // 관리자: 기록 지우기(확인함)
   async resolvePasswordReset({ uid }) {
     try {
       await deleteDoc(doc(db, "passwordResets", uid));
@@ -436,47 +424,10 @@ const actions = {
     }
   },
 
-  // 관리자: 승인 = 임시 비밀번호로 초기화
-  // 비밀번호 변경 자체는 브라우저에서 불가능해서 Apps Script 가 대신 처리합니다.
-  // 그 뒤 mustChangePassword 를 세워두면, 학생이 임시 비밀번호로 들어왔을 때
-  // 곧바로 새 비밀번호를 직접 정하도록 화면이 강제합니다.
-  async approvePasswordReset({ targetUid }) {
-    const me = auth.currentUser;
-    if (!me) return fail("로그인이 필요합니다.");
+  // [삭제됨] approvePasswordReset — 승인 단계를 없애면서 쓰지 않게 되었습니다.
+  // 초기화는 학생이 요청한 즉시 Apps Script 가 처리하고, 아래 getPasswordResets 는
+  // 이제 "승인 대기 목록" 이 아니라 "초기화된 기록" 을 읽습니다.
 
-    // targetUid 는 요청 문서의 id, 즉 uidOf(userKey) 입니다.
-    // 이전해 온 학생은 이 값이 곧 실제 uid 지만, 이후 가입한 학생은 다릅니다.
-    // 그 경우 accountIndex 가 실제 uid 를 알려 줍니다.
-    const realUid = await realUidFor(targetUid);
-
-    let res;
-    try {
-      const idToken = await me.getIdToken();
-      const r = await fetch(SHEETS_HELPER_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify({ action: "resetStudentPassword", idToken, targetUid: realUid })
-      });
-      res = await r.json();
-    } catch (e) {
-      return fail("초기화 서버에 연결하지 못했습니다.");
-    }
-
-    if (res.status !== "success") return fail(res.message || "초기화에 실패했습니다.");
-
-    // 다음 로그인 때 새 비밀번호를 정하도록 표시하고, 처리한 요청은 지웁니다.
-    try {
-      await updateDoc(doc(db, "users", realUid), { mustChangePassword: true });
-      await deleteDoc(doc(db, "passwordResets", targetUid));
-    } catch (e) {
-      // 비밀번호는 이미 바뀐 상태라, 표시 실패는 알려만 주고 성공으로 둡니다.
-      console.warn("초기화는 됐으나 후처리에 실패했습니다:", e);
-    }
-    return ok({ tempPassword: res.tempPassword, message: "임시 비밀번호로 초기화했습니다." });
-  },
-
-  // 학생 본인이 새 비밀번호를 설정합니다.
-  // 로그인된 상태이므로 서버 없이 브라우저에서 바로 처리됩니다.
   async changeOwnPassword({ newPassword }) {
     const me = auth.currentUser;
     if (!me) return fail("로그인이 필요합니다.");

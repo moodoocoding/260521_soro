@@ -181,31 +181,16 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // ---------- 비밀번호 재설정 요청 ----------
-    // 비밀번호를 잊은 학생은 로그인 자체를 못 하므로 이 요청만은 비로그인으로 만들 수 있어야 합니다.
-    // 문서 ID 를 uid 로 고정해 한 학생당 대기 중인 요청이 하나만 존재하도록 했습니다.
-    // 선생님이 처리하면 문서를 지웁니다(= 처리 완료).
+    // ---------- 비밀번호 초기화 기록 ----------
+    // 승인 단계를 없앴기 때문에 학생이 만드는 "요청" 은 더 이상 없습니다.
+    // 초기화는 Apps Script 가 소유자 권한으로 즉시 처리하고, 여기에는 누가 언제
+    // 초기화했는지 기록만 남깁니다. 소유자 권한 호출은 규칙을 거치지 않으므로
+    // 브라우저에서 오는 쓰기는 전부 막습니다.
+    //
+    // 이 기록이 승인을 대신하는 유일한 안전장치입니다. 남의 계정을 초기화하면
+    // 그 흔적이 반드시 여기 남고, 선생님이 관리자 화면에서 보게 됩니다.
     match /passwordResets/{uid} {
-      // 실제로 존재하는 계정에 대해서만, pending 상태로만 만들 수 있습니다.
-      // 실존 계정에 대해서만 만들 수 있습니다. 이전해 온 학생은 문서 id 가 곧
-      // 실제 uid 라 users 에서 바로 확인되고, 이후 가입한 학생은 accountIndex 로
-      // 확인합니다. 규칙 안의 exists() 는 읽기 권한과 무관하게 동작하므로
-      // 로그인하지 못한 학생도 이 검사를 통과할 수 있습니다.
-      allow create: if (exists(/databases/$(database)/documents/users/$(uid))
-                        || exists(/databases/$(database)/documents/accountIndex/$(uid)))
-                    && request.resource.data.uid == uid
-                    && request.resource.data.status == 'pending';
-
-      // 같은 학생이 다시 요청하는 것은 허용합니다 — 조건은 생성과 똑같습니다.
-      //
-      // 예전에는 수정을 전부 막았는데, 그러면 이미 요청해 둔 학생이 한 번 더 누를 때
-      // 거부되고 화면에는 "가입된 계정이 없습니다" 가 떴습니다. 눌러도 반응이 없어
-      // 다시 누른 아이에게 "네 정보가 틀렸다" 고 말하는 셈이라 오히려 헷갈립니다.
-      // 조건이 생성과 같으므로 남의 요청을 엉뚱한 내용으로 바꿔 놓을 수는 없습니다.
-      allow update: if (exists(/databases/$(database)/documents/users/$(uid))
-                        || exists(/databases/$(database)/documents/accountIndex/$(uid)))
-                    && request.resource.data.uid == uid
-                    && request.resource.data.status == 'pending';
+      allow create, update: if false;
       allow read, delete: if isAdmin();
     }
 
