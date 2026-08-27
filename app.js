@@ -6805,14 +6805,40 @@ async function renderPasswordResetRequests() {
     return;
   }
 
-  listEl.innerHTML = list.map(r => `
-    <button type="button" class="admin-lock-chip" id="pwreset-${r.uid}"
-            onclick="approvePasswordReset('${r.uid}', '${escapeHtml(r.name || "")}')">
-      <span class="lock-state">승인</span>
-      <span class="lock-name">${r.grade}학년 ${r.classNum}반 ${r.number}번 ${escapeHtml(r.name || "")}</span>
-    </button>
-  `).join("");
+  // 승인 옆에 "무시"를 함께 둡니다. 오타로 들어온 요청이나 잘못 누른 요청을
+  // 지울 방법이 없으면, 그걸 없애려고 승인(= 멀쩡한 비밀번호를 초기화)해야 합니다.
+  listEl.innerHTML = list.map(r => {
+    const who = `${r.grade}학년 ${r.classNum}반 ${r.number}번 ${escapeHtml(r.name || "")}`;
+    return `
+    <span class="admin-pwreset-item">
+      <button type="button" class="admin-lock-chip" id="pwreset-${r.uid}"
+              onclick="approvePasswordReset('${r.uid}', '${escapeHtml(r.name || "")}')">
+        <span class="lock-state">승인</span>
+        <span class="lock-name">${who}</span>
+      </button>
+      <button type="button" class="admin-pwreset-dismiss" id="pwreset-dismiss-${r.uid}"
+              title="이 요청을 지웁니다. 비밀번호는 바뀌지 않습니다."
+              onclick="dismissPasswordReset('${r.uid}', '${escapeHtml(r.name || "")}')">무시</button>
+    </span>`;
+  }).join("");
 }
+
+// 요청만 지웁니다. 비밀번호는 건드리지 않습니다.
+window.dismissPasswordReset = async function (targetUid, name) {
+  if (!confirm(`${name} 학생의 초기화 요청을 지울까요?\n\n비밀번호는 바뀌지 않습니다. 잘못 들어온 요청을 정리할 때 씁니다.`)) return;
+
+  const btn = document.getElementById(`pwreset-dismiss-${targetUid}`);
+  if (btn) btn.disabled = true;
+
+  const res = await callBackend({ action: "resolvePasswordReset", uid: targetUid });
+  if (res.status === "success") {
+    showToast(`${name} 학생의 요청을 지웠습니다.`, "success");
+    renderPasswordResetRequests();
+  } else {
+    showToast(res.message || "요청을 지우지 못했습니다.", "error");
+    if (btn) btn.disabled = false;
+  }
+};
 
 window.approvePasswordReset = async function (targetUid, name) {
   if (!confirm(`${name} 학생의 비밀번호를 초기화할까요?\n\n임시 비밀번호로 바뀌고, 학생이 그 비밀번호로 로그인하면 새 비밀번호를 직접 정하게 됩니다.`)) return;

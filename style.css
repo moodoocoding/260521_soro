@@ -4935,3 +4935,33 @@ body[data-admin-mode="zepquiz"] .zepquiz-gauge-track {
 
 .force-pw-card button:disabled { opacity: 0.55; cursor: progress; }
 .force-pw-card button:hover:not(:disabled) { opacity: 0.86; }
+
+/* 비밀번호 초기화 요청: 승인 칩과 무시 버튼을 한 줄로 묶습니다. */
+.admin-pwreset-item {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 6px;
+  margin: 0 8px 8px 0;
+}
+
+.admin-pwreset-dismiss {
+  padding: 0 12px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: background 0.2s, color 0.2s;
+}
+
+.admin-pwreset-dismiss:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09);
+  color: #fff;
+}
+
+.admin-pwreset-dismiss:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

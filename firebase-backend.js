@@ -44,6 +44,24 @@ async function sha(algo, text) {
 const emailOf = async userKey => "u" + (await sha("SHA-256", userKey)).slice(0, 24) + "@soro.local";
 const uidOf   = async userKey => (await sha("SHA-1", userKey)).slice(0, 28);
 
+// 이전해 온 484명은 uid 를 직접 지정해 넣었기 때문에 uidOf(userKey) 와 일치합니다.
+// 하지만 그 뒤로 가입하는 학생은 Firebase 가 무작위 uid 를 발급하므로 일치하지 않습니다.
+// 비밀번호를 잊은 학생은 로그인을 못 해 자기 uid 를 알 방법이 없고, users 문서도
+// 읽을 수 없어서(본인·관리자 전용) 초기화 요청 자체가 불가능해집니다.
+//
+// 그래서 uidOf(userKey) → 실제 uid 를 알려 주는 작은 색인을 둡니다.
+// 이 색인은 선생님이 초기화를 승인할 때만 읽습니다.
+async function ensureAccountIndex(userKey, realUid) {
+  try {
+    const key = await uidOf(userKey);
+    if (key === realUid) return;   // 이전해 온 계정 — 색인이 필요 없습니다
+    await setDoc(doc(db, "accountIndex", key), { uid: realUid });
+  } catch (e) {
+    // 색인을 못 남겨도 로그인·가입 자체는 성공시킵니다.
+    console.warn("[firebase] 계정 색인 기록 실패", e);
+  }
+}
+
 const ok   = extra => ({ status: "success", ...extra });
 const fail = message => ({ status: "error", message });
 
@@ -90,6 +108,9 @@ const actions = {
     try {
       await signInWithEmailAndPassword(auth, await emailOf(userKey), _rawPassword);
       const p = await requireProfile();
+      // 이 수정 이전에 가입한 계정도 로그인 한 번으로 색인이 채워집니다.
+      // 이전해 온 계정은 해시 비교만 하고 끝나므로 추가 통신이 없습니다.
+      ensureAccountIndex(userKey, auth.currentUser.uid);
       const res = ok({ message: "인증 성공" });
       if (p && p.admin === true) res.adminToken = await auth.currentUser.getIdToken();
       return res;
@@ -106,6 +127,7 @@ const actions = {
         grade: Number(grade), classNum: Number(classNum), number: Number(number),
         name, userKey
       });
+      await ensureAccountIndex(userKey, cred.user.uid);
       return ok({ message: "가입 완료" });
     } catch (e) {
       if (e.code === "auth/email-already-in-use") return fail("이미 동일한 정보로 가입된 계정이 존재합니다.");
@@ -343,33 +365,37 @@ const actions = {
     if (!userKey) return fail("학년/반/번호/이름을 정확히 입력해 주세요.");
     const uid = await uidOf(userKey);
 
-    // 존재하는 계정인지 먼저 확인해서, 오타로 인한 헛된 요청을 줄입니다.
-    const profile = await getDoc(doc(db, "users", uid));
-    if (!profile.exists()) {
-      return fail("해당 정보로 가입된 계정이 없습니다. 학년/반/번호/이름을 다시 확인해 주세요.");
-    }
+    // [주의] 여기서 users 문서를 읽어 계정 존재를 확인하면 안 됩니다.
+    // 이 기능을 쓰는 학생은 비밀번호를 잊어 로그인을 못 하는 상태이고,
+    // users 는 본인이나 관리자만 읽을 수 있어 반드시 permission-denied 가 납니다.
+    // 계정이 실제로 있는지는 보안 규칙의 exists(users/{uid}) 가 대신 확인합니다.
+    //
+    // 표시용 학년/반/번호/이름도 프로필 대신 userKey 에서 뽑습니다.
+    // userKey 는 학생이 방금 입력한 값이라 조회가 필요 없습니다.
+    const parts = String(userKey).split("_");
+    const num = v => { const n = parseInt(v, 10); return Number.isNaN(n) ? null : n; };
 
-    const p = profile.data();
     try {
       await setDoc(doc(db, "passwordResets", uid), {
         uid,
         userKey,
-        name: p.name || "",
-        grade: p.grade ?? null,
-        classNum: p.classNum ?? null,
-        number: p.number ?? null,
-        email: await emailOf(userKey),
+        grade: num(parts[0]),
+        classNum: num(parts[1]),
+        number: num(parts[2]),
+        name: parts.slice(3).join("_"),   // 이름에 _ 가 있어도 잃지 않도록
         status: "pending",
         requestedAt: new Date().toISOString()
       });
-      return ok({ message: "선생님께 비밀번호 재설정 요청을 보냈습니다." });
+      return ok({ message: "초기화를 요청했습니다. 선생님께 말씀드리면 임시 비밀번호를 알려주십니다." });
     } catch (e) {
-      // 이미 대기 중인 요청이 있으면 create 가 거부됩니다. 학생에게는 같은 뜻이므로 성공으로 안내합니다.
-      return ok({ message: "이미 요청이 접수되어 있습니다. 선생님께 문의해 주세요." });
+      // 규칙의 exists() 에 걸린 경우입니다. 오타이거나 가입하지 않은 정보입니다.
+      if (e && e.code === "permission-denied") {
+        return fail("해당 정보로 가입된 계정이 없습니다. 학년/반/번호/이름을 다시 확인해 주세요.");
+      }
+      return fail("요청을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.");
     }
   },
 
-  // 관리자: 대기 중인 재설정 요청 목록
   async getPasswordResets() {
     try {
       const snap = await getDocs(collection(db, "passwordResets"));
@@ -399,13 +425,24 @@ const actions = {
     const me = auth.currentUser;
     if (!me) return fail("로그인이 필요합니다.");
 
+    // targetUid 는 요청 문서의 id, 즉 uidOf(userKey) 입니다.
+    // 이전해 온 학생은 이 값이 곧 실제 uid 지만, 이후 가입한 학생은 다릅니다.
+    // 그 경우 accountIndex 가 실제 uid 를 알려 줍니다.
+    let realUid = targetUid;
+    try {
+      const idx = await getDoc(doc(db, "accountIndex", targetUid));
+      if (idx.exists() && idx.data().uid) realUid = idx.data().uid;
+    } catch (e) {
+      // 색인이 없으면 이전해 온 계정이므로 targetUid 가 실제 uid 입니다.
+    }
+
     let res;
     try {
       const idToken = await me.getIdToken();
       const r = await fetch(SHEETS_HELPER_URL, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: JSON.stringify({ action: "resetStudentPassword", idToken, targetUid })
+        body: JSON.stringify({ action: "resetStudentPassword", idToken, targetUid: realUid })
       });
       res = await r.json();
     } catch (e) {
@@ -416,7 +453,7 @@ const actions = {
 
     // 다음 로그인 때 새 비밀번호를 정하도록 표시하고, 처리한 요청은 지웁니다.
     try {
-      await updateDoc(doc(db, "users", targetUid), { mustChangePassword: true });
+      await updateDoc(doc(db, "users", realUid), { mustChangePassword: true });
       await deleteDoc(doc(db, "passwordResets", targetUid));
     } catch (e) {
       // 비밀번호는 이미 바뀐 상태라, 표시 실패는 알려만 주고 성공으로 둡니다.

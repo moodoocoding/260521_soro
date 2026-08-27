@@ -13,7 +13,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Noto+Sans+KR:wght@300;400;700&family=East+Sea+Dokdo&family=Nanum+Brush+Script&family=Nanum+Pen+Script&family=Gamja+Flower&family=Yeon+Sung&family=Song+Myung&family=Poor+Story&family=Gaegu&family=Kirang+Haerang&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=1.4.0">
+  <link rel="stylesheet" href="style.css?v=1.5.0">
 
   <!-- Firestore 백엔드. 이제 기본값이며, ?backend=sheets 로만 옛 백엔드를 씁니다.
        (app.js 의 BACKEND_MODE 와 판단 기준이 같아야 합니다) -->
@@ -40,7 +40,7 @@
         });
         var s = document.createElement("script");
         s.type = "module";
-        s.src = "firebase-backend.js?v=3";
+        s.src = "firebase-backend.js?v=4";
         // 모듈을 아예 못 받아온 경우에도 기다리는 쪽이 멈추지 않게 풀어 줍니다.
         s.onerror = function () { window.__soroFirebaseResolve && window.__soroFirebaseResolve(); };
         document.head.appendChild(s);
@@ -815,6 +815,6 @@
 
 
   <!-- Main JavaScript -->
-  <script src="app.js?v=2.7.0" defer></script>
+  <script src="app.js?v=2.8.0" defer></script>
 </body>
 </html>
