@@ -72,6 +72,48 @@ const EXT_BY_MIME = {
   "audio/ogg": "ogg", "audio/mp4": "m4a", "video/mp4": "mp4"
 };
 
+// 올리기 전에 그림을 줄입니다.
+//
+// 드라이브는 갤러리에 축소본(sz=w600)을 줬지만 Storage 는 올린 그대로를 줍니다.
+// 원본을 그대로 두면 갤러리 한 번에 24장 × 0.8MB ≈ 19MB 를 내려받게 되고,
+// 전교생이 보면 하루 무료 한도(1GB)를 훌쩍 넘습니다.
+//
+// 가로 1000px 로 줄이고 JPEG 로 다시 저장하면 대략 0.8MB → 0.15MB 가 됩니다.
+// 엽서를 화면에서 보는 용도로는 차이를 느낄 수 없고, 버킷이 미국에 있어
+// 생기는 지연도 파일이 작아지면 대부분 묻힙니다.
+//
+// 원본보다 커지는 경우(이미 작거나 단색 위주의 PNG)에는 원본을 그대로 씁니다.
+const MAX_IMAGE_WIDTH = 1000;
+const JPEG_QUALITY = 0.82;
+
+function shrinkImage(dataUrl) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const scale = Math.min(1, MAX_IMAGE_WIDTH / img.naturalWidth);
+        if (scale === 1 && dataUrl.length < 300 * 1024) return resolve(dataUrl);
+
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.naturalWidth * scale);
+        canvas.height = Math.round(img.naturalHeight * scale);
+        const ctx = canvas.getContext("2d");
+        // 투명 배경이 검게 나오지 않도록 흰 바탕을 깔고 그립니다.
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        const out = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
+        resolve(out.length < dataUrl.length ? out : dataUrl);
+      } catch (e) {
+        resolve(dataUrl);   // 줄이지 못하면 원본으로 올립니다
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
 async function uploadDataUrls(uid, contestId, data) {
   if (!data || typeof data !== "object") return data;
   const out = { ...data };
@@ -79,11 +121,14 @@ async function uploadDataUrls(uid, contestId, data) {
   for (const [field, value] of Object.entries(out)) {
     if (typeof value !== "string" || !value.startsWith("data:")) continue;
 
-    const mime = (value.slice(5).split(";")[0] || "").toLowerCase();
+    let payload = value;
+    if (value.startsWith("data:image/")) payload = await shrinkImage(value);
+
+    const mime = (payload.slice(5).split(";")[0] || "").toLowerCase();
     const ext = EXT_BY_MIME[mime] || "bin";
     const path = `submissions/${contestId}/${uid}/${field}.${ext}`;
 
-    await uploadString(storageRef(storage, path), value, "data_url");
+    await uploadString(storageRef(storage, path), payload, "data_url");
     out[field] = publicUrlFor(path);
   }
   return out;
