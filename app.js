@@ -696,6 +696,87 @@ function getGoogleDriveDirectLink(url) {
   return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w600` : url;
 }
 
+// ====================================================
+// 드라이브 이미지를 조금씩 나눠서 불러옵니다.
+//
+// 엽서 그림은 Firestore 가 아니라 구글 드라이브에 있고, 링크만 저장돼 있습니다.
+// 그런데 드라이브는 한꺼번에 여러 장을 요청하면 일부에 아예 응답하지 않습니다.
+// 실제로 재어 보니 24장을 동시에 요청하면 12장이 실패했고, 한 장씩 요청하면
+// 24장 모두 성공했습니다. 그림이 깨진 게 아니라 요청이 거절된 것입니다.
+//
+// loading="lazy" 로는 해결되지 않습니다. 그건 "화면 밖이면 미룬다" 일 뿐,
+// 화면 안에 들어온 카드 수십 장은 여전히 동시에 요청하기 때문입니다.
+//
+// 그래서 화면에 들어온 것만, 한 번에 네 장씩, 실패하면 다시 시도합니다.
+// ====================================================
+const DRIVE_IMAGE_CONCURRENCY = 4;
+const DRIVE_IMAGE_RETRIES = 3;
+const NO_IMAGE_URL = "https://placehold.co/800x600/0c0c0e/ffffff?text=No+Image";
+
+const _driveQueue = [];
+let _driveActive = 0;
+let _driveObserver = null;
+
+function _pumpDriveQueue() {
+  while (_driveActive < DRIVE_IMAGE_CONCURRENCY && _driveQueue.length) {
+    const item = _driveQueue.shift();
+    if (!item.img.isConnected) continue;   // 화면에서 사라진 카드는 건너뜁니다
+    _driveActive++;
+    _loadDriveImage(item);
+  }
+}
+
+function _loadDriveImage(item) {
+  const { img, src } = item;
+  let settled = false;
+
+  const finish = ok => {
+    if (settled) return;
+    settled = true;
+    img.onload = img.onerror = null;
+    _driveActive--;
+
+    if (ok) {
+      if (img.parentElement) img.parentElement.classList.remove("loading");
+    } else if (item.tries < DRIVE_IMAGE_RETRIES) {
+      // 거절은 대개 일시적이라 잠시 뒤 다시 넣습니다.
+      item.tries++;
+      setTimeout(() => { _driveQueue.push(item); _pumpDriveQueue(); }, 700 * item.tries);
+    } else {
+      img.src = NO_IMAGE_URL;
+      if (img.parentElement) img.parentElement.classList.remove("loading");
+    }
+    _pumpDriveQueue();
+  };
+
+  img.onload = () => finish(true);
+  img.onerror = () => finish(false);
+  // 실패는 대부분 "오류" 가 아니라 "응답이 오지 않음" 이라 시간 제한이 필요합니다.
+  setTimeout(() => { if (!img.complete || !img.naturalWidth) finish(false); }, 12000);
+
+  // 다시 시도할 때는 주소를 살짝 바꿔, 실패한 응답이 캐시에 남아 있어도 새로 받게 합니다.
+  img.src = item.tries ? `${src}&_r=${item.tries}` : src;
+}
+
+// 카드를 다 그린 뒤 불러 주세요. data-src 를 가진 이미지를 화면 진입 시 불러옵니다.
+function activateDriveImages(root) {
+  const scope = root || document;
+  if (!_driveObserver) {
+    _driveObserver = new IntersectionObserver(entries => {
+      entries.forEach(en => {
+        if (!en.isIntersecting) return;
+        _driveObserver.unobserve(en.target);
+        const src = en.target.getAttribute("data-src");
+        if (!src) return;
+        en.target.removeAttribute("data-src");
+        _driveQueue.push({ img: en.target, src, tries: 0 });
+        _pumpDriveQueue();
+      });
+    }, { rootMargin: "400px" });   // 화면에 닿기 조금 전부터 준비합니다
+  }
+  scope.querySelectorAll("img[data-src]").forEach(img => _driveObserver.observe(img));
+}
+
 // 클릭해서 크게 볼 때 쓰는 원본 크기 이미지.
 // 엽서 원본이 800×600이라 sz=w1600을 요청하면 축소 없이 원본이 옵니다.
 // (w600으로 크게 띄우면 600px짜리를 늘리는 셈이라 작고 흐릿하게 보였습니다.)
@@ -1788,7 +1869,7 @@ async function renderLibraryGallery(gradeFilter = "all", forceRefresh = false) {
       ${isMine ? `<div class="postcard-mine-tag">내 엽서</div>` : ""}
       <div class="gallery-card-img-wrapper postcard-ratio loading" style="position: relative; cursor: pointer; overflow: hidden;">
         ${awardBadgeHtml}
-        <img class="gallery-card-img" src="${imageUrl}" alt="${escapeHtml(displayTitle)}" loading="lazy" onload="this.parentElement.classList.remove('loading')" onerror="this.src='https://placehold.co/800x600/0c0c0e/ffffff?text=No+Image'; this.parentElement.classList.remove('loading')" onclick="openImageModal('${imageUrl}')">
+        <img class="gallery-card-img" data-src="${imageUrl}" alt="${escapeHtml(displayTitle)}" onclick="openImageModal('${imageUrl}')">
       </div>
       <div class="postcard-body">
         ${bookText ? `<p class="postcard-quote">&ldquo;${escapeHtml(bookText)}&rdquo;</p>` : ""}
@@ -1801,6 +1882,8 @@ async function renderLibraryGallery(gradeFilter = "all", forceRefresh = false) {
     `;
     gridContainer.appendChild(card);
   });
+
+  activateDriveImages(gridContainer);
 
   // 제출 직후 넘어온 경우, 방금 낸 내 엽서로 스크롤해 보여줍니다.
   if (pendingScrollToSubmissionId) {
@@ -2188,7 +2271,7 @@ function renderDIDGrid() {
     card.innerHTML = `
       <div class="did-card-img-wrapper loading" style="position: relative;">
         ${awardBadgeHtml}
-        <img class="did-card-img" src="${imageUrl}" alt="${escapeHtml(entry.data["book-title"] || "독서 엽서")}" loading="lazy" onload="this.parentElement.classList.remove('loading')" onerror="this.src='https://placehold.co/800x600/0c0c0e/ffffff?text=No+Image'; this.parentElement.classList.remove('loading')" onclick="openImageModal('${imageUrl}')">
+        <img class="did-card-img" data-src="${imageUrl}" alt="${escapeHtml(entry.data["book-title"] || "독서 엽서")}" onclick="openImageModal('${imageUrl}')">
       </div>
       <div class="did-card-info" style="display: flex; flex-direction: column; gap: 8px; padding: 12px 8px 4px 8px;">
         ${entry.data["book-text"] ? `<p class="did-card-quote">&ldquo;${escapeHtml(entry.data["book-text"])}&rdquo;</p>` : ""}
@@ -2201,6 +2284,8 @@ function renderDIDGrid() {
     `;
     gridView.appendChild(card);
   });
+
+  activateDriveImages(gridView);
 }
 
 function renderDIDSlideshow() {
