@@ -16,6 +16,9 @@ import {
   getFirestore, doc, getDoc, setDoc, deleteDoc, updateDoc,
   collection, query, where, getDocs
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import {
+  getStorage, ref as storageRef, uploadString
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
 // 시험용 프로젝트 설정입니다. 실제 전환(6단계) 때 운영 프로젝트 값으로 바꿉니다.
 // apiKey 는 원래 클라이언트에 공개되는 값이라 비밀이 아닙니다.
@@ -23,7 +26,8 @@ const firebaseConfig = {
   apiKey: "AIzaSyDe9QrX3PWh67cl9_B8LoM8Q6BOsJNLVf8",
   authDomain: "soro-migration-test.firebaseapp.com",
   projectId: "soro-migration-test",
-  appId: "1:961856422255:web:8c67a9148e3e233631a89a"
+  appId: "1:961856422255:web:8c67a9148e3e233631a89a",
+  storageBucket: "soro-migration-test.firebasestorage.app"
 };
 
 // 비밀번호 초기화만 담당하는 기존 Apps Script 주소.
@@ -41,6 +45,50 @@ async function sha(algo, text) {
   const buf = await crypto.subtle.digest(algo, new TextEncoder().encode(text));
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
 }
+const storage = getStorage(app);
+
+// ====================================================
+// 그림·음원을 Storage 에 올리고, 문서에는 주소만 남깁니다.
+//
+// 예전 앱스크립트는 제출된 그림을 드라이브에 올리고 링크만 시트에 넣었습니다.
+// Firebase 로 옮기면서 이 단계가 빠져, base64 문자열이 그대로 문서에
+// 들어갔습니다. 엽서 하나가 0.89~1.13MB 인데 문서 한도는 1MiB 라서,
+// 큰 그림은 저장이 통째로 실패했고 화면에는 엉뚱하게 "접수 기간이 아니다" 가
+// 떴습니다. 학생은 작품이 사라진 것도 몰랐습니다.
+//
+// data: 로 시작하는 값이면 그림이든 음원이든 전부 올립니다.
+// 경로를 고정해 두어 다시 제출하면 같은 자리를 덮어씁니다.
+// ====================================================
+// 읽기가 공개라 토큰 없는 주소로 충분합니다. 계산으로 만들 수 있어서
+// 업로드할 때마다 주소를 물어보는 왕복이 없고, 옛 그림을 옮길 때 만드는
+// 주소와도 형태가 같습니다.
+const publicUrlFor = path =>
+  `https://firebasestorage.googleapis.com/v0/b/${firebaseConfig.storageBucket}` +
+  `/o/${encodeURIComponent(path)}?alt=media`;
+
+const EXT_BY_MIME = {
+  "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif",
+  "audio/mpeg": "mp3", "audio/mp3": "mp3", "audio/wav": "wav", "audio/webm": "webm",
+  "audio/ogg": "ogg", "audio/mp4": "m4a", "video/mp4": "mp4"
+};
+
+async function uploadDataUrls(uid, contestId, data) {
+  if (!data || typeof data !== "object") return data;
+  const out = { ...data };
+
+  for (const [field, value] of Object.entries(out)) {
+    if (typeof value !== "string" || !value.startsWith("data:")) continue;
+
+    const mime = (value.slice(5).split(";")[0] || "").toLowerCase();
+    const ext = EXT_BY_MIME[mime] || "bin";
+    const path = `submissions/${contestId}/${uid}/${field}.${ext}`;
+
+    await uploadString(storageRef(storage, path), value, "data_url");
+    out[field] = publicUrlFor(path);
+  }
+  return out;
+}
+
 const emailOf = async userKey => "u" + (await sha("SHA-256", userKey)).slice(0, 24) + "@soro.local";
 const uidOf   = async userKey => (await sha("SHA-1", userKey)).slice(0, 28);
 
@@ -178,6 +226,17 @@ const actions = {
     if (!p) return fail("로그인이 필요합니다.");
     // 문서 ID 를 고정해 한 학생당 공모전별 1개만 남게 합니다.
     const id = `${entry.contestId}__${p.uid}`;
+
+    // 그림·음원을 먼저 Storage 로 보냅니다. 실패하면 여기서 멈춰야
+    // "저장됐다" 고 잘못 알리는 일이 없습니다.
+    let payload;
+    try {
+      payload = await uploadDataUrls(p.uid, entry.contestId, entry.data || {});
+    } catch (e) {
+      console.error("[firebase] 파일 업로드 실패", e);
+      return fail("작품 파일을 올리지 못했습니다. 연결을 확인하고 다시 시도해 주세요.");
+    }
+
     try {
       await setDoc(doc(db, "submissions", id), {
         uid: p.uid,
@@ -189,11 +248,17 @@ const actions = {
         studentClass: Number(entry.studentClass),
         studentNumber: Number(entry.studentNumber),
         timestamp: entry.timestamp,
-        data: entry.data || {}
+        data: payload
       }, { merge: true });
       return ok({ message: "접수 성공" });
     } catch (e) {
-      return fail("현재 접수 기간이 아닌 공모전입니다.");
+      // 예전에는 어떤 오류든 "접수 기간이 아니다" 로 바꿔 버려서, 용량 초과로
+      // 저장에 실패한 학생이 원인을 알 수 없었습니다. 이제 구분해서 알립니다.
+      console.error("[firebase] submitContest 실패", e);
+      if (e && e.code === "permission-denied") {
+        return fail("현재 접수 기간이 아닌 공모전입니다.");
+      }
+      return fail("작품을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
     }
   },
 

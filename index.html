@@ -40,7 +40,7 @@
         });
         var s = document.createElement("script");
         s.type = "module";
-        s.src = "firebase-backend.js?v=6";
+        s.src = "firebase-backend.js?v=7";
         // 모듈을 아예 못 받아온 경우에도 기다리는 쪽이 멈추지 않게 풀어 줍니다.
         s.onerror = function () { window.__soroFirebaseResolve && window.__soroFirebaseResolve(); };
         document.head.appendChild(s);
@@ -815,6 +815,6 @@
 
 
   <!-- Main JavaScript -->
-  <script src="app.js?v=3.0.0" defer></script>
+  <script src="app.js?v=3.1.0" defer></script>
 </body>
 </html>

@@ -7965,6 +7965,153 @@ function firestorePatch(token, pathWithQuery, fields) {
   }
 }
 
+// ====================================================
+// [옮기기용] 드라이브에 있는 학생 작품을 Firebase Storage 로 옮깁니다.
+//
+// 편집기에서 migrateDriveToStorage 를 실행하세요.
+// 한 번에 전부 처리하면 실행 시간 제한(6분)에 걸리므로, 조금씩 처리하고
+// 어디까지 했는지 기억해 둡니다. **로그에 "아직 남았습니다" 가 보이면
+// 같은 함수를 다시 실행**하면 이어서 진행합니다.
+//
+// 처음부터 다시 하려면 resetStorageMigration 을 한 번 실행하세요.
+//
+// 안전장치:
+//   · 이미 Storage 로 바뀐 항목은 건너뜁니다 (여러 번 실행해도 안전)
+//   · 옮긴 뒤에도 드라이브 원본은 그대로 둡니다 (문제가 생기면 되돌릴 수 있게)
+//   · Firestore 는 data 항목만 고칩니다 (updateMask)
+// ====================================================
+var STORAGE_BUCKET = "soro-migration-test.firebasestorage.app";
+var MIGRATE_BATCH = 40;   // 한 번 실행에 처리할 제출물 수
+
+function migrateDriveToStorage() {
+  var props = PropertiesService.getScriptProperties();
+  var pageToken = props.getProperty("migrate_page_token") || "";
+  var done = parseInt(props.getProperty("migrate_done") || "0", 10);
+  var moved = parseInt(props.getProperty("migrate_moved") || "0", 10);
+  var failed = parseInt(props.getProperty("migrate_failed") || "0", 10);
+
+  var token = ScriptApp.getOAuthToken();
+  var started = new Date().getTime();
+  var processed = 0;
+
+  while (processed < MIGRATE_BATCH) {
+    // 실행 시간이 4분을 넘으면 다음 실행으로 넘깁니다.
+    if (new Date().getTime() - started > 240000) break;
+
+    var url = "https://firestore.googleapis.com/v1/projects/" + FIREBASE_PROJECT_ID +
+              "/databases/(default)/documents/submissions?pageSize=10" +
+              (pageToken ? "&pageToken=" + encodeURIComponent(pageToken) : "");
+    var res = UrlFetchApp.fetch(url, {
+      headers: { Authorization: "Bearer " + token }, muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) {
+      Logger.log("❌ 목록을 읽지 못했습니다: " + res.getContentText().slice(0, 300));
+      return;
+    }
+    var page = JSON.parse(res.getContentText());
+    var docs = page.documents || [];
+
+    for (var i = 0; i < docs.length; i++) {
+      var r = migrateOneSubmission(docs[i], token);
+      done++;
+      if (r === "moved") moved++;
+      else if (r === "failed") failed++;
+      processed++;
+    }
+
+    pageToken = page.nextPageToken || "";
+    if (!pageToken) break;
+  }
+
+  props.setProperty("migrate_page_token", pageToken);
+  props.setProperty("migrate_done", String(done));
+  props.setProperty("migrate_moved", String(moved));
+  props.setProperty("migrate_failed", String(failed));
+
+  Logger.log("살펴본 제출물 " + done + "건 / 옮긴 파일 " + moved + "개 / 실패 " + failed + "개");
+  if (pageToken) {
+    Logger.log("");
+    Logger.log("▶ 아직 남았습니다. migrateDriveToStorage 를 다시 실행해 주세요.");
+  } else {
+    Logger.log("");
+    Logger.log("✅ 전부 끝났습니다. 드라이브 원본은 그대로 두었습니다.");
+  }
+}
+
+function resetStorageMigration() {
+  var props = PropertiesService.getScriptProperties();
+  ["migrate_page_token", "migrate_done", "migrate_moved", "migrate_failed"]
+    .forEach(function (k) { props.deleteProperty(k); });
+  Logger.log("처음부터 다시 시작하도록 되돌렸습니다.");
+}
+
+// 제출물 하나를 살펴보고, 드라이브에 있는 파일만 옮깁니다.
+function migrateOneSubmission(doc, token) {
+  var fields = doc.fields || {};
+  var dataField = fields.data && fields.data.mapValue && fields.data.mapValue.fields;
+  if (!dataField) return "skip";
+
+  var docPath = doc.name.split("/documents/")[1];   // 예: submissions/library__abc
+  var uid = fields.uid && fields.uid.stringValue;
+  var contestId = fields.contestId && fields.contestId.stringValue;
+  if (!uid || !contestId) return "skip";
+
+  var changed = false;
+
+  for (var key in dataField) {
+    var v = dataField[key] && dataField[key].stringValue;
+    if (!v || v.indexOf("drive.google.com") < 0) continue;   // 이미 옮겼거나 파일이 아님
+
+    var fileId = extractFileIdFromUrl(v);
+    if (!fileId) continue;
+
+    try {
+      var blob = DriveApp.getFileById(fileId).getBlob();
+      var ext = (blob.getName().split(".").pop() || "").toLowerCase();
+      if (!ext || ext.length > 5) ext = blob.getContentType().indexOf("audio") === 0 ? "mp3" : "png";
+
+      var path = "submissions/" + contestId + "/" + uid + "/" + key + "." + ext;
+      var upUrl = "https://firebasestorage.googleapis.com/v0/b/" + STORAGE_BUCKET +
+                  "/o?uploadType=media&name=" + encodeURIComponent(path);
+      var up = UrlFetchApp.fetch(upUrl, {
+        method: "post",
+        contentType: blob.getContentType(),
+        payload: blob.getBytes(),
+        headers: { Authorization: "Bearer " + token },
+        muteHttpExceptions: true
+      });
+      if (up.getResponseCode() < 200 || up.getResponseCode() >= 300) {
+        Logger.log("업로드 실패 " + docPath + " / " + key + " : " + up.getContentText().slice(0, 200));
+        return "failed";
+      }
+
+      dataField[key] = { stringValue:
+        "https://firebasestorage.googleapis.com/v0/b/" + STORAGE_BUCKET +
+        "/o/" + encodeURIComponent(path) + "?alt=media" };
+      changed = true;
+    } catch (e) {
+      Logger.log("드라이브 파일을 열지 못했습니다 " + docPath + " / " + key + " : " + e);
+      return "failed";
+    }
+  }
+
+  if (!changed) return "skip";
+
+  // data 항목만 고칩니다. updateMask 가 없으면 문서 전체가 교체됩니다.
+  var patch = UrlFetchApp.fetch(
+    "https://firestore.googleapis.com/v1/projects/" + FIREBASE_PROJECT_ID +
+    "/databases/(default)/documents/" + docPath + "?updateMask.fieldPaths=data",
+    {
+      method: "patch", contentType: "application/json",
+      payload: JSON.stringify({ fields: { data: { mapValue: { fields: dataField } } } }),
+      headers: { Authorization: "Bearer " + token }, muteHttpExceptions: true
+    });
+  if (patch.getResponseCode() < 200 || patch.getResponseCode() >= 300) {
+    Logger.log("주소 갱신 실패 " + docPath + " : " + patch.getContentText().slice(0, 200));
+    return "failed";
+  }
+  return "moved";
+}
+
 function doPost(e) {
   var response = { status: "error", message: "알 수 없는 요청" };
   
