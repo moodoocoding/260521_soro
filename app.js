@@ -3638,6 +3638,61 @@ function setupAudioUploader() {
   }
 }
 
+// 배경을 엽서 비율(800×600)에 맞춰 그립니다.
+//
+// 예전에는 drawImage(img, 0, 0, 800, 600) 으로 무조건 늘려 그렸습니다.
+// 그런데 배경 75장 중 33장이 세로로 긴 사진(800×1424 등)이라, 그것들이
+// 2배 넘게 짓눌린 채로 엽서에 들어갔습니다.
+// 이제는 짧은 쪽을 채우도록 확대한 뒤 가운데를 잘라 씁니다. 비율이 유지됩니다.
+function drawBackgroundCover(ctx, img, w, h) {
+  const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
+  const dw = img.naturalWidth * scale;
+  const dh = img.naturalHeight * scale;
+  ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
+}
+
+// 같은 배경이라도 매번 다르게 보이도록 색감을 무작위로 바꿉니다.
+//
+// 배경 사진은 75장뿐이라 한 반(25명)이 같은 테마를 고르면 반드시 겹칩니다.
+// 사진을 더 구하는 대신, 그릴 때마다 색조·채도·밝기를 조금씩 돌리고 색을
+// 덧입혀 서로 다른 그림처럼 보이게 합니다. 조합이 넉넉해서 같은 사진이라도
+// 같은 결과가 잘 나오지 않습니다. 파일은 하나도 늘지 않습니다.
+const CALLI_TINTS = [
+  ["rgba(255,183,77,0.16)",  "rgba(120,60,20,0.10)"],   // 노을빛
+  ["rgba(120,180,255,0.16)", "rgba(20,40,90,0.12)"],    // 새벽빛
+  ["rgba(255,140,170,0.14)", "rgba(90,30,60,0.10)"],    // 장밋빛
+  ["rgba(160,255,200,0.13)", "rgba(20,70,50,0.10)"],    // 풀빛
+  ["rgba(200,170,255,0.15)", "rgba(50,30,80,0.10)"],    // 보랏빛
+  ["rgba(255,240,200,0.14)", "rgba(90,70,30,0.10)"]     // 촛불빛
+];
+
+function applyBackgroundVariation(ctx, canvas) {
+  const w = canvas.width, h = canvas.height;
+
+  // 좌우 반전은 자연 풍경에서 티가 안 나면서 인상은 달라집니다.
+  if (Math.random() < 0.5) {
+    ctx.save();
+    ctx.translate(w, 0); ctx.scale(-1, 1);
+    ctx.drawImage(canvas, 0, 0);
+    ctx.restore();
+  }
+
+  // 위아래로 색을 덧입혀 시간대가 다른 것처럼 보이게 합니다.
+  const [top, bottom] = CALLI_TINTS[Math.floor(Math.random() * CALLI_TINTS.length)];
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, top);
+  grad.addColorStop(1, bottom);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+
+  // 가장자리를 살짝 어둡게 해서 글씨가 가운데로 모이게 합니다.
+  const vignette = ctx.createRadialGradient(w / 2, h / 2, h * 0.35, w / 2, h / 2, h * 0.85);
+  vignette.addColorStop(0, "rgba(0,0,0,0)");
+  vignette.addColorStop(1, `rgba(0,0,0,${(0.18 + Math.random() * 0.22).toFixed(2)})`);
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, w, h);
+}
+
 async function generateAICalligraphyCard() {
   const titleInput = document.getElementById("sub-calli-title");
   const authorInput = document.getElementById("sub-calli-author");
@@ -3737,8 +3792,13 @@ async function generateAICalligraphyCard() {
       canvas.height = 600;
       const ctx = canvas.getContext("2d");
 
-      // Draw background
-      ctx.drawImage(img, 0, 0, 800, 600);
+      // Draw background — 비율을 지켜 채우고, 매번 색감을 다르게 입힙니다.
+      ctx.filter = `hue-rotate(${Math.floor(Math.random() * 40) - 20}deg) ` +
+                   `saturate(${(0.85 + Math.random() * 0.45).toFixed(2)}) ` +
+                   `brightness(${(0.9 + Math.random() * 0.25).toFixed(2)})`;
+      drawBackgroundCover(ctx, img, 800, 600);
+      ctx.filter = "none";
+      applyBackgroundVariation(ctx, canvas);
 
       // Dark Overlay for typography readability
       ctx.fillStyle = "rgba(0, 0, 0, 0.42)";
