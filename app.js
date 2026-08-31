@@ -8028,13 +8028,28 @@ function migrateDriveToStorage() {
   props.setProperty("migrate_failed", String(failed));
 
   Logger.log("살펴본 제출물 " + done + "건 / 옮긴 파일 " + moved + "개 / 실패 " + failed + "개");
+
   if (pageToken) {
     Logger.log("");
     Logger.log("▶ 아직 남았습니다. migrateDriveToStorage 를 다시 실행해 주세요.");
-  } else {
-    Logger.log("");
-    Logger.log("✅ 전부 끝났습니다. 드라이브 원본은 그대로 두었습니다.");
+    return;
   }
+
+  // 한 바퀴를 다 돌았습니다.
+  if (failed > 0) {
+    // 실패한 것들은 그냥 지나쳐 왔습니다. 이미 옮긴 것은 건너뛰므로 처음부터
+    // 다시 돌아도 손해가 없습니다. 그래서 자동으로 되감아 둡니다.
+    props.deleteProperty("migrate_page_token");
+    props.setProperty("migrate_done", "0");
+    props.setProperty("migrate_failed", "0");
+    Logger.log("");
+    Logger.log("⚠ " + failed + "개를 옮기지 못했습니다. 원인을 고친 뒤 다시 실행하면");
+    Logger.log("   이미 옮긴 것은 건너뛰고 실패한 것만 다시 시도합니다.");
+    return;
+  }
+
+  Logger.log("");
+  Logger.log("✅ 전부 끝났습니다. 드라이브 원본은 그대로 두었습니다.");
 }
 
 function resetStorageMigration() {
@@ -8089,6 +8104,15 @@ function migrateOneSubmission(doc, token) {
         "/o/" + encodeURIComponent(path) + "?alt=media" };
       changed = true;
     } catch (e) {
+      var msg = String(e);
+      if (msg.indexOf("enabling APIs: drive") >= 0) {
+        // 앱스크립트를 Firebase 프로젝트로 옮기면 그 프로젝트에도 드라이브 API 가
+        // 켜져 있어야 합니다. 앱스크립트가 스스로 켜려다 거부당한 상태입니다.
+        Logger.log("❌ 드라이브 API 가 꺼져 있습니다. 아래 주소에서 '사용 설정' 을 누른 뒤");
+        Logger.log("   1~2분 기다렸다가 다시 실행해 주세요.");
+        Logger.log("   https://console.cloud.google.com/apis/library/drive.googleapis.com?project=" + FIREBASE_PROJECT_ID);
+        throw e;   // 같은 오류가 수백 줄 쌓이지 않도록 여기서 멈춥니다
+      }
       Logger.log("드라이브 파일을 열지 못했습니다 " + docPath + " / " + key + " : " + e);
       return "failed";
     }
