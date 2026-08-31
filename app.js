@@ -254,14 +254,14 @@ const CONTESTS_DATA = [
     month: 9,
     monthText: "9월",
     period: "2026. 9. 1.(화) ~ 2026. 9. 30.(수)",
-    summary: "zepquiz에 접속하여 저작권 문제를 풀고, 완료 후 아래에서 참여 확인 버튼을 눌러주세요!",
-    description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 완료 후 아래의 <strong>'참여 완료' 버튼</strong>을 눌러 참가를 확인해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
+    summary: "zepquiz에 접속하여 추석 문제를 풀고, 완료 후 아래에서 참여 확인 버튼을 눌러주세요!",
+    description: "우리 명절 추석을 주제로 한 온라인 퀴즈 이벤트입니다. 추석의 유래와 세시풍속을 알아보며 문제를 풀어 보세요. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 완료 후 아래의 <strong>'참여 완료' 버튼</strong>을 눌러 참가를 확인해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
     rules: [
       "참가 대상: 본교 3~6학년 학생 누구나",
-      "퀴즈 내용: 저작권",
+      "퀴즈 내용: 추석 (유래와 세시풍속)",
       "제한 사항: <strong style=\"color: #e63946;\">학교 구글 아이디로 로그인하여 문제 풀 것</strong>",
       "참여 방법: 퀴즈를 다 풀면 아래 '참여 완료' 버튼을 클릭",
-      "특별 혜택: 학급 모든 친구가 제출할 경우 과자 지급",
+      "특별 혜택: 학급 친구의 80% 이상 참여 시 과자 지급",
       "젭퀴즈 링크: <a href=\"https://quiz.zep.us/play/N3vAz5\" target=\"_blank\" class=\"contest-link\">zepquiz 바로가기 (https://quiz.zep.us/play/N3vAz5)</a>"
     ],
     evaluationCriteria: [
