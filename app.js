@@ -474,6 +474,14 @@ const CONTESTS_DATA = [
   }
 ];
 
+// 배경은 테마를 고르면 그 안에서 무작위로 하나 뽑힙니다.
+// 예전에는 테마마다 파일을 20개씩 적어 두었는데 그중 25개가 내용이 같은
+// 중복이었습니다. 특히 기본값인 sky 는 20칸 중 8칸이 같은 그림이라, sky 를
+// 고른 학생 10명 중 4명이 똑같은 배경을 받았습니다. forest_19 는 숲이 아니라
+// 바닷가 사진이고 ocean_3 과 같은 파일이어서 숲에서 뺐습니다.
+//
+// 아래는 내용이 서로 다른 것만 남긴 목록입니다. 파일은 지우지 않았으므로
+// 나중에 새 그림으로 채워 넣으면 됩니다.
 const CALLIGRAPHY_THEMES_IMAGES = {
   sky: [
     "asset/backgrounds/sky_0.jpg",
@@ -481,21 +489,14 @@ const CALLIGRAPHY_THEMES_IMAGES = {
     "asset/backgrounds/sky_2.jpg",
     "asset/backgrounds/sky_3.jpg",
     "asset/backgrounds/sky_4.jpg",
-    "asset/backgrounds/sky_5.jpg",
-    "asset/backgrounds/sky_6.jpg",
     "asset/backgrounds/sky_7.jpg",
     "asset/backgrounds/sky_8.jpg",
-    "asset/backgrounds/sky_9.jpg",
     "asset/backgrounds/sky_10.jpg",
-    "asset/backgrounds/sky_11.jpg",
     "asset/backgrounds/sky_12.jpg",
     "asset/backgrounds/sky_13.jpg",
     "asset/backgrounds/sky_14.jpg",
-    "asset/backgrounds/sky_15.jpg",
-    "asset/backgrounds/sky_16.jpg",
     "asset/backgrounds/sky_17.jpg",
-    "asset/backgrounds/sky_18.jpg",
-    "asset/backgrounds/sky_19.jpg"
+    "asset/backgrounds/sky_18.jpg"
   ],
   forest: [
     "asset/backgrounds/forest_0.jpg",
@@ -507,39 +508,28 @@ const CALLIGRAPHY_THEMES_IMAGES = {
     "asset/backgrounds/forest_6.jpg",
     "asset/backgrounds/forest_7.jpg",
     "asset/backgrounds/forest_8.jpg",
-    "asset/backgrounds/forest_9.jpg",
     "asset/backgrounds/forest_10.jpg",
-    "asset/backgrounds/forest_11.jpg",
     "asset/backgrounds/forest_12.jpg",
     "asset/backgrounds/forest_13.jpg",
-    "asset/backgrounds/forest_14.jpg",
     "asset/backgrounds/forest_15.jpg",
     "asset/backgrounds/forest_16.jpg",
     "asset/backgrounds/forest_17.jpg",
-    "asset/backgrounds/forest_18.jpg",
-    "asset/backgrounds/forest_19.jpg"
+    "asset/backgrounds/forest_18.jpg"
   ],
   ocean: [
     "asset/backgrounds/ocean_0.jpg",
     "asset/backgrounds/ocean_1.jpg",
-    "asset/backgrounds/ocean_2.jpg",
     "asset/backgrounds/ocean_3.jpg",
-    "asset/backgrounds/ocean_4.jpg",
     "asset/backgrounds/ocean_5.jpg",
     "asset/backgrounds/ocean_6.jpg",
     "asset/backgrounds/ocean_7.jpg",
     "asset/backgrounds/ocean_8.jpg",
-    "asset/backgrounds/ocean_9.jpg",
     "asset/backgrounds/ocean_10.jpg",
-    "asset/backgrounds/ocean_11.jpg",
     "asset/backgrounds/ocean_12.jpg",
-    "asset/backgrounds/ocean_13.jpg",
     "asset/backgrounds/ocean_14.jpg",
     "asset/backgrounds/ocean_15.jpg",
     "asset/backgrounds/ocean_16.jpg",
-    "asset/backgrounds/ocean_17.jpg",
-    "asset/backgrounds/ocean_18.jpg",
-    "asset/backgrounds/ocean_19.jpg"
+    "asset/backgrounds/ocean_17.jpg"
   ],
   room: [
     "asset/backgrounds/room_0.jpg",
@@ -551,14 +541,10 @@ const CALLIGRAPHY_THEMES_IMAGES = {
     "asset/backgrounds/room_6.jpg",
     "asset/backgrounds/room_7.jpg",
     "asset/backgrounds/room_8.jpg",
-    "asset/backgrounds/room_9.jpg",
-    "asset/backgrounds/room_10.jpg",
     "asset/backgrounds/room_11.jpg",
     "asset/backgrounds/room_12.jpg",
     "asset/backgrounds/room_13.jpg",
     "asset/backgrounds/room_14.jpg",
-    "asset/backgrounds/room_15.jpg",
-    "asset/backgrounds/room_16.jpg",
     "asset/backgrounds/room_17.jpg",
     "asset/backgrounds/room_18.jpg",
     "asset/backgrounds/room_19.jpg"
@@ -566,16 +552,13 @@ const CALLIGRAPHY_THEMES_IMAGES = {
   paper: [
     "asset/backgrounds/paper_0.jpg",
     "asset/backgrounds/paper_1.jpg",
-    "asset/backgrounds/paper_2.jpg",
     "asset/backgrounds/paper_3.jpg",
     "asset/backgrounds/paper_4.jpg",
-    "asset/backgrounds/paper_5.jpg",
     "asset/backgrounds/paper_6.jpg",
     "asset/backgrounds/paper_7.jpg",
     "asset/backgrounds/paper_8.jpg",
     "asset/backgrounds/paper_9.jpg",
     "asset/backgrounds/paper_10.jpg",
-    "asset/backgrounds/paper_11.jpg",
     "asset/backgrounds/paper_12.jpg",
     "asset/backgrounds/paper_13.jpg",
     "asset/backgrounds/paper_14.jpg",
