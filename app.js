@@ -262,7 +262,7 @@ const CONTESTS_DATA = [
       "제한 사항: <strong style=\"color: #e63946;\">학교 구글 아이디로 로그인하여 문제 풀 것</strong>",
       "참여 방법: 퀴즈를 다 풀면 아래 '참여 완료' 버튼을 클릭",
       "특별 혜택: 학급 모든 친구가 제출할 경우 과자 지급",
-      "젭퀴즈 링크: <span class=\"contest-link-disabled\" style=\"color: #808088; font-style: italic;\">젭퀴즈 4회차 링크는 아직 등록되지 않았습니다 (준비 중).</span>"
+      "젭퀴즈 링크: <a href=\"https://quiz.zep.us/play/N3vAz5\" target=\"_blank\" class=\"contest-link\">zepquiz 바로가기 (https://quiz.zep.us/play/N3vAz5)</a>"
     ],
     evaluationCriteria: [
       { category: "퀴즈 완료 여부", desc: "제시된 퀴즈를 끝까지 정상적으로 풀었는지 확인합니다.", weight: "60%" },
