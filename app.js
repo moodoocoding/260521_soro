@@ -482,23 +482,36 @@ const CONTESTS_DATA = [
 //
 // 아래는 내용이 서로 다른 것만 남긴 목록입니다. 파일은 지우지 않았으므로
 // 나중에 새 그림으로 채워 넣으면 됩니다.
+// 배경은 테마를 고르면 그 안에서 무작위로 하나 뽑히고, 그릴 때마다 색감을
+// 다르게 입힙니다(applyBackgroundVariation).
+//
+// 원래 테마마다 20장씩 적혀 있었지만 실제로는 이랬습니다.
+//   · 25장이 다른 파일과 내용이 같은 중복이었습니다. 특히 기본값 sky 는
+//     20칸 중 8칸이 같은 그림이라, sky 를 고른 학생 10명 중 4명이 똑같은
+//     배경을 받았습니다.
+//   · 테마와 전혀 상관없는 사진이 섞여 있었습니다. sky 에 게임 컨트롤러,
+//     paper 에 서류가방 든 사람과 공장 사진, ocean 에 도시 빌딩숲 등.
+//
+// 중복과 엉뚱한 사진을 걷어내고, 테마만 잘못 붙은 것은 맞는 테마로 옮겼습니다.
+//
+// [주의] 파일 이름의 앞부분은 더 이상 테마를 뜻하지 않습니다.
+//        예: forest 목록에 있는 sky_1.jpg 는 잎사귀 사진입니다.
+//        이름을 바꾸면 기록을 따라가기 어려워져 그대로 두었습니다.
 const CALLIGRAPHY_THEMES_IMAGES = {
   sky: [
     "asset/backgrounds/sky_0.jpg",
-    "asset/backgrounds/sky_1.jpg",
     "asset/backgrounds/sky_2.jpg",
     "asset/backgrounds/sky_3.jpg",
-    "asset/backgrounds/sky_4.jpg",
     "asset/backgrounds/sky_7.jpg",
-    "asset/backgrounds/sky_8.jpg",
     "asset/backgrounds/sky_10.jpg",
     "asset/backgrounds/sky_12.jpg",
     "asset/backgrounds/sky_13.jpg",
     "asset/backgrounds/sky_14.jpg",
-    "asset/backgrounds/sky_17.jpg",
     "asset/backgrounds/sky_18.jpg"
   ],
   forest: [
+    "asset/backgrounds/sky_1.jpg",
+    "asset/backgrounds/sky_4.jpg",
     "asset/backgrounds/forest_0.jpg",
     "asset/backgrounds/forest_1.jpg",
     "asset/backgrounds/forest_2.jpg",
@@ -510,13 +523,13 @@ const CALLIGRAPHY_THEMES_IMAGES = {
     "asset/backgrounds/forest_8.jpg",
     "asset/backgrounds/forest_10.jpg",
     "asset/backgrounds/forest_12.jpg",
-    "asset/backgrounds/forest_13.jpg",
     "asset/backgrounds/forest_15.jpg",
     "asset/backgrounds/forest_16.jpg",
-    "asset/backgrounds/forest_17.jpg",
-    "asset/backgrounds/forest_18.jpg"
+    "asset/backgrounds/forest_17.jpg"
   ],
   ocean: [
+    "asset/backgrounds/forest_13.jpg",
+    "asset/backgrounds/forest_18.jpg",
     "asset/backgrounds/ocean_0.jpg",
     "asset/backgrounds/ocean_1.jpg",
     "asset/backgrounds/ocean_3.jpg",
@@ -524,14 +537,13 @@ const CALLIGRAPHY_THEMES_IMAGES = {
     "asset/backgrounds/ocean_6.jpg",
     "asset/backgrounds/ocean_7.jpg",
     "asset/backgrounds/ocean_8.jpg",
-    "asset/backgrounds/ocean_10.jpg",
     "asset/backgrounds/ocean_12.jpg",
-    "asset/backgrounds/ocean_14.jpg",
     "asset/backgrounds/ocean_15.jpg",
     "asset/backgrounds/ocean_16.jpg",
     "asset/backgrounds/ocean_17.jpg"
   ],
   room: [
+    "asset/backgrounds/ocean_14.jpg",
     "asset/backgrounds/room_0.jpg",
     "asset/backgrounds/room_1.jpg",
     "asset/backgrounds/room_2.jpg",
@@ -539,7 +551,6 @@ const CALLIGRAPHY_THEMES_IMAGES = {
     "asset/backgrounds/room_4.jpg",
     "asset/backgrounds/room_5.jpg",
     "asset/backgrounds/room_6.jpg",
-    "asset/backgrounds/room_7.jpg",
     "asset/backgrounds/room_8.jpg",
     "asset/backgrounds/room_11.jpg",
     "asset/backgrounds/room_12.jpg",
@@ -554,15 +565,12 @@ const CALLIGRAPHY_THEMES_IMAGES = {
     "asset/backgrounds/paper_1.jpg",
     "asset/backgrounds/paper_3.jpg",
     "asset/backgrounds/paper_4.jpg",
-    "asset/backgrounds/paper_6.jpg",
     "asset/backgrounds/paper_7.jpg",
-    "asset/backgrounds/paper_8.jpg",
     "asset/backgrounds/paper_9.jpg",
     "asset/backgrounds/paper_10.jpg",
     "asset/backgrounds/paper_12.jpg",
     "asset/backgrounds/paper_13.jpg",
     "asset/backgrounds/paper_14.jpg",
-    "asset/backgrounds/paper_15.jpg",
     "asset/backgrounds/paper_16.jpg",
     "asset/backgrounds/paper_17.jpg",
     "asset/backgrounds/paper_18.jpg",
@@ -3348,11 +3356,11 @@ function setupDynamicFormFields(contest) {
       <div class="form-group" style="margin-bottom: 12px;">
         <label for="sub-calli-theme">🌌 배경화면 AI 이미지 테마 선택</label>
         <select id="sub-calli-theme" style="width:100%; padding:10px; background:var(--bg-tertiary); color:var(--text-primary); border:1px solid var(--border-color); border-radius:8px; font-weight:bold;">
-          <option value="sky">🌌 깊고 푸른 밤하늘 & 우주 은하수 (20종 랜덤)</option>
-          <option value="forest">🌿 평화로운 초록 숲속 & 나뭇잎 사이 햇살 (20종 랜덤)</option>
-          <option value="ocean">🌅 노을빛 바다 & 부드러운 황금 파도 (20종 랜덤)</option>
-          <option value="room">🕯️ 따뜻하고 아늑한 방 안 & 은은한 촛불 (20종 랜덤)</option>
-          <option value="paper">📜 빈티지 양장 종이 질감 & 클래식 스크롤 (20종 랜덤)</option>
+          <option value="sky">🌌 깊고 푸른 밤하늘 & 우주 은하수 (무작위)</option>
+          <option value="forest">🌿 평화로운 초록 숲속 & 나뭇잎 사이 햇살 (무작위)</option>
+          <option value="ocean">🌅 노을빛 바다 & 부드러운 황금 파도 (무작위)</option>
+          <option value="room">🕯️ 따뜻하고 아늑한 방 안 & 은은한 촛불 (무작위)</option>
+          <option value="paper">📜 빈티지 종이 질감 & 감성 추상 무늬 (무작위)</option>
         </select>
       </div>
 
