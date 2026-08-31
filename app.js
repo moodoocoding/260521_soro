@@ -251,9 +251,9 @@ const CONTESTS_DATA = [
   {
     id: "zepquiz_4",
     title: "Zep quiz(4회차)",
-    month: 10,
-    monthText: "10월",
-    period: "추후 안내 예정",
+    month: 9,
+    monthText: "9월",
+    period: "2026. 9. 1.(화) ~ 2026. 9. 30.(수)",
     summary: "zepquiz에 접속하여 저작권 문제를 풀고, 완료 후 아래에서 참여 확인 버튼을 눌러주세요!",
     description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 완료 후 아래의 <strong>'참여 완료' 버튼</strong>을 눌러 참가를 확인해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
     rules: [
@@ -281,8 +281,8 @@ const CONTESTS_DATA = [
   {
     id: "zepquiz_5",
     title: "Zep quiz(5회차)",
-    month: 11,
-    monthText: "11월",
+    month: 10,
+    monthText: "10월",
     period: "추후 안내 예정",
     summary: "zepquiz에 접속하여 저작권 문제를 풀고, 완료 후 아래에서 참여 확인 버튼을 눌러주세요!",
     description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 완료 후 아래의 <strong>'참여 완료' 버튼</strong>을 눌러 참가를 확인해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
@@ -311,8 +311,8 @@ const CONTESTS_DATA = [
   {
     id: "zepquiz_6",
     title: "Zep quiz(6회차)",
-    month: 12,
-    monthText: "12월",
+    month: 11,
+    monthText: "11월",
     period: "추후 안내 예정",
     summary: "zepquiz에 접속하여 저작권 문제를 풀고, 완료 후 아래에서 참여 확인 버튼을 눌러주세요!",
     description: "올바른 저작권 사용에 관한 문제를 해결하는 온라인 퀴즈 이벤트입니다. 제공된 zepquiz 방에 입장하여 퀴즈 문제를 풀고, 완료 후 아래의 <strong>'참여 완료' 버튼</strong>을 눌러 참가를 확인해 주세요. <strong style=\"display: block; margin-top: 8px; color: #e63946;\">※ 반드시 학교 구글 아이디로 로그인해서 문제를 풀어야만 제출이 인정됩니다!</strong>",
