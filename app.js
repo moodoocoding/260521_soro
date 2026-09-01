@@ -492,6 +492,7 @@ const CONTESTS_DATA = [
 //     paper 에 서류가방 든 사람과 공장 사진, ocean 에 도시 빌딩숲 등.
 //
 // 중복과 엉뚱한 사진을 걷어내고, 테마만 잘못 붙은 것은 맞는 테마로 옮겼습니다.
+// 2026-09-01: 새 원본 82장을 추가해 각 테마를 30장, 총 150장으로 맞췄습니다.
 //
 // [주의] 파일 이름의 앞부분은 더 이상 테마를 뜻하지 않습니다.
 //        예: forest 목록에 있는 sky_1.jpg 는 잎사귀 사진입니다.
@@ -506,7 +507,28 @@ const CALLIGRAPHY_THEMES_IMAGES = {
     "asset/backgrounds/sky_12.jpg",
     "asset/backgrounds/sky_13.jpg",
     "asset/backgrounds/sky_14.jpg",
-    "asset/backgrounds/sky_18.jpg"
+    "asset/backgrounds/sky_18.jpg",
+    "asset/backgrounds/sky_gen_01.jpg",
+    "asset/backgrounds/sky_gen_02.jpg",
+    "asset/backgrounds/sky_gen_03.jpg",
+    "asset/backgrounds/sky_gen_04.jpg",
+    "asset/backgrounds/sky_gen_05.jpg",
+    "asset/backgrounds/sky_gen_06.jpg",
+    "asset/backgrounds/sky_gen_07.jpg",
+    "asset/backgrounds/sky_gen_08.jpg",
+    "asset/backgrounds/sky_gen_09.jpg",
+    "asset/backgrounds/sky_gen_10.jpg",
+    "asset/backgrounds/sky_gen_11.jpg",
+    "asset/backgrounds/sky_gen_12.jpg",
+    "asset/backgrounds/sky_gen_13.jpg",
+    "asset/backgrounds/sky_gen_14.jpg",
+    "asset/backgrounds/sky_gen_15.jpg",
+    "asset/backgrounds/sky_gen_16.jpg",
+    "asset/backgrounds/sky_gen_17.jpg",
+    "asset/backgrounds/sky_gen_18.jpg",
+    "asset/backgrounds/sky_gen_19.jpg",
+    "asset/backgrounds/sky_gen_20.jpg",
+    "asset/backgrounds/sky_gen_21.jpg"
   ],
   forest: [
     "asset/backgrounds/sky_1.jpg",
@@ -524,7 +546,21 @@ const CALLIGRAPHY_THEMES_IMAGES = {
     "asset/backgrounds/forest_12.jpg",
     "asset/backgrounds/forest_15.jpg",
     "asset/backgrounds/forest_16.jpg",
-    "asset/backgrounds/forest_17.jpg"
+    "asset/backgrounds/forest_17.jpg",
+    "asset/backgrounds/forest_gen_01.jpg",
+    "asset/backgrounds/forest_gen_02.jpg",
+    "asset/backgrounds/forest_gen_03.jpg",
+    "asset/backgrounds/forest_gen_04.jpg",
+    "asset/backgrounds/forest_gen_05.jpg",
+    "asset/backgrounds/forest_gen_06.jpg",
+    "asset/backgrounds/forest_gen_07.jpg",
+    "asset/backgrounds/forest_gen_08.jpg",
+    "asset/backgrounds/forest_gen_09.jpg",
+    "asset/backgrounds/forest_gen_10.jpg",
+    "asset/backgrounds/forest_gen_11.jpg",
+    "asset/backgrounds/forest_gen_12.jpg",
+    "asset/backgrounds/forest_gen_13.jpg",
+    "asset/backgrounds/forest_gen_14.jpg"
   ],
   ocean: [
     "asset/backgrounds/forest_13.jpg",
@@ -539,7 +575,24 @@ const CALLIGRAPHY_THEMES_IMAGES = {
     "asset/backgrounds/ocean_12.jpg",
     "asset/backgrounds/ocean_15.jpg",
     "asset/backgrounds/ocean_16.jpg",
-    "asset/backgrounds/ocean_17.jpg"
+    "asset/backgrounds/ocean_17.jpg",
+    "asset/backgrounds/ocean_gen_01.jpg",
+    "asset/backgrounds/ocean_gen_02.jpg",
+    "asset/backgrounds/ocean_gen_03.jpg",
+    "asset/backgrounds/ocean_gen_04.jpg",
+    "asset/backgrounds/ocean_gen_05.jpg",
+    "asset/backgrounds/ocean_gen_06.jpg",
+    "asset/backgrounds/ocean_gen_07.jpg",
+    "asset/backgrounds/ocean_gen_08.jpg",
+    "asset/backgrounds/ocean_gen_09.jpg",
+    "asset/backgrounds/ocean_gen_10.jpg",
+    "asset/backgrounds/ocean_gen_11.jpg",
+    "asset/backgrounds/ocean_gen_12.jpg",
+    "asset/backgrounds/ocean_gen_13.jpg",
+    "asset/backgrounds/ocean_gen_14.jpg",
+    "asset/backgrounds/ocean_gen_15.jpg",
+    "asset/backgrounds/ocean_gen_16.jpg",
+    "asset/backgrounds/ocean_gen_17.jpg"
   ],
   room: [
     "asset/backgrounds/ocean_14.jpg",
@@ -557,7 +610,21 @@ const CALLIGRAPHY_THEMES_IMAGES = {
     "asset/backgrounds/room_14.jpg",
     "asset/backgrounds/room_17.jpg",
     "asset/backgrounds/room_18.jpg",
-    "asset/backgrounds/room_19.jpg"
+    "asset/backgrounds/room_19.jpg",
+    "asset/backgrounds/room_gen_01.jpg",
+    "asset/backgrounds/room_gen_02.jpg",
+    "asset/backgrounds/room_gen_03.jpg",
+    "asset/backgrounds/room_gen_04.jpg",
+    "asset/backgrounds/room_gen_05.jpg",
+    "asset/backgrounds/room_gen_06.jpg",
+    "asset/backgrounds/room_gen_07.jpg",
+    "asset/backgrounds/room_gen_08.jpg",
+    "asset/backgrounds/room_gen_09.jpg",
+    "asset/backgrounds/room_gen_10.jpg",
+    "asset/backgrounds/room_gen_11.jpg",
+    "asset/backgrounds/room_gen_12.jpg",
+    "asset/backgrounds/room_gen_13.jpg",
+    "asset/backgrounds/room_gen_14.jpg"
   ],
   paper: [
     "asset/backgrounds/paper_0.jpg",
@@ -573,7 +640,23 @@ const CALLIGRAPHY_THEMES_IMAGES = {
     "asset/backgrounds/paper_16.jpg",
     "asset/backgrounds/paper_17.jpg",
     "asset/backgrounds/paper_18.jpg",
-    "asset/backgrounds/paper_19.jpg"
+    "asset/backgrounds/paper_19.jpg",
+    "asset/backgrounds/paper_gen_01.jpg",
+    "asset/backgrounds/paper_gen_02.jpg",
+    "asset/backgrounds/paper_gen_03.jpg",
+    "asset/backgrounds/paper_gen_04.jpg",
+    "asset/backgrounds/paper_gen_05.jpg",
+    "asset/backgrounds/paper_gen_06.jpg",
+    "asset/backgrounds/paper_gen_07.jpg",
+    "asset/backgrounds/paper_gen_08.jpg",
+    "asset/backgrounds/paper_gen_09.jpg",
+    "asset/backgrounds/paper_gen_10.jpg",
+    "asset/backgrounds/paper_gen_11.jpg",
+    "asset/backgrounds/paper_gen_12.jpg",
+    "asset/backgrounds/paper_gen_13.jpg",
+    "asset/backgrounds/paper_gen_14.jpg",
+    "asset/backgrounds/paper_gen_15.jpg",
+    "asset/backgrounds/paper_gen_16.jpg"
   ]
 };
 
@@ -3660,8 +3743,8 @@ function drawBackgroundCover(ctx, img, w, h) {
 
 // 같은 배경이라도 매번 다르게 보이도록 색감을 무작위로 바꿉니다.
 //
-// 배경 사진은 75장뿐이라 한 반(25명)이 같은 테마를 고르면 반드시 겹칩니다.
-// 사진을 더 구하는 대신, 그릴 때마다 색조·채도·밝기를 조금씩 돌리고 색을
+// 배경은 테마별 30장으로 늘었지만, 같은 사진이 뽑혀도 결과가 서로 달라 보이도록
+// 그릴 때마다 색조·채도·밝기를 조금씩 돌리고 색을
 // 덧입혀 서로 다른 그림처럼 보이게 합니다. 조합이 넉넉해서 같은 사진이라도
 // 같은 결과가 잘 나오지 않습니다. 파일은 하나도 늘지 않습니다.
 const CALLI_TINTS = [
