@@ -259,7 +259,6 @@ const CONTESTS_DATA = [
     rules: [
       "참가 대상: 본교 3~6학년 학생 누구나",
       "퀴즈 내용: 추석 (유래와 세시풍속)",
-      "제한 사항: <strong style=\"color: #e63946;\">학교 구글 아이디로 로그인하여 문제 풀 것</strong>",
       "참여 방법: 퀴즈를 다 풀면 아래 '참여 완료' 버튼을 클릭",
       "특별 혜택: 학급 친구의 80% 이상 참여 시 과자 지급",
       "젭퀴즈 링크: <a href=\"https://quiz.zep.us/play/N3vAz5\" target=\"_blank\" class=\"contest-link\">zepquiz 바로가기 (https://quiz.zep.us/play/N3vAz5)</a>"
