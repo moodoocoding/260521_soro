@@ -5427,8 +5427,25 @@ function validateSignupForm() {
     number.parentElement.classList.add("has-error");
     isValid = false;
   }
-  if (!name.value.trim()) {
+  // [이름 검사] 예전에는 비어 있는지만 봤습니다. 그래서 학생들이 이름 칸에
+  // 반까지 적어 "4-1방준후", "1반허원" 같은 계정이 7개 만들어졌습니다.
+  // 계정은 학년_반_번호_이름 을 통째로 대조해 찾기 때문에, 나중에 본인이
+  // "방준후" 로 입력하면 계정을 못 찾아 로그인도 비밀번호 초기화도 막힙니다.
+  //
+  // 숫자·기호·공백과 '반' 을 막습니다. 이름만 적게 하려는 것이라,
+  // 한글이 아닌 이름도 쓸 수 있게 글자 종류 자체는 제한하지 않습니다.
+  const nameVal = name.value.trim();
+  if (!nameVal) {
     name.parentElement.classList.add("has-error");
+    showToast("이름을 입력해 주세요.", "error");
+    isValid = false;
+  } else if (/[0-9\-_\s]/.test(nameVal) || nameVal.indexOf("반") >= 0) {
+    name.parentElement.classList.add("has-error");
+    showToast("이름만 적어 주세요. 학년·반·번호는 위에서 이미 선택했습니다. (예: 4-1방준후 ❌ → 방준후 ⭕)", "error");
+    isValid = false;
+  } else if (nameVal.length < 2) {
+    name.parentElement.classList.add("has-error");
+    showToast("이름을 두 글자 이상 입력해 주세요.", "error");
     isValid = false;
   }
   if (!pass.value || pass.value.length < 4) {
@@ -8267,6 +8284,148 @@ function migrateOneSubmission(doc, token) {
     return "failed";
   }
   return "moved";
+}
+
+// ====================================================
+// [1회용] 이름에 반이 섞여 들어간 계정을 정리합니다.
+//
+// 가입할 때 이름 칸에 반까지 적은 학생들이 있습니다("4-1방준후", "1반허원").
+// 계정은 학년_반_번호_이름 을 통째로 해시해서 찾기 때문에, 본인이 나중에
+// "방준후" 로 입력하면 다른 계정을 찾게 되어 로그인도 비밀번호 초기화도
+// 막힙니다.
+//
+// uid 는 그대로 두고 로그인 주소와 표시 이름만 바꾸므로,
+// **제출 기록은 하나도 잃지 않습니다.**
+//
+// 실행 방법: 편집기에서 fixStudentNames 를 골라 ▷실행.
+// 여러 번 실행해도 안전합니다(이미 고친 계정은 건너뜁니다).
+// ====================================================
+var NAME_FIXES = [
+  { key: "3_1_25_1반허원",   newName: "허원"   },
+  { key: "4_1_10_4-1방준후", newName: "방준후" },
+  { key: "4_1_11_4-1방채은", newName: "방채은" },
+  { key: "4_1_17_4-1정우진", newName: "정우진" },
+  { key: "4_1_20_4-1최종인", newName: "최종인" },
+  { key: "4_1_21_4-1최희주", newName: "최희주" },
+  { key: "5_1_11_5-1연지훈", newName: "연지훈" }
+];
+
+function emailOfKey(userKey) {
+  return "u" + sha256Hex(userKey).slice(0, 24) + "@soro.local";
+}
+
+// 이메일로 계정을 찾습니다. 없으면 null.
+function lookupByEmail(token, email) {
+  var res = UrlFetchApp.fetch(
+    "https://identitytoolkit.googleapis.com/v1/projects/" + FIREBASE_PROJECT_ID + "/accounts:lookup",
+    {
+      method: "post", contentType: "application/json",
+      payload: JSON.stringify({ email: [email] }),
+      headers: { Authorization: "Bearer " + token }, muteHttpExceptions: true
+    });
+  if (res.getResponseCode() < 200 || res.getResponseCode() >= 300) return null;
+  var body = JSON.parse(res.getContentText());
+  return (body.users && body.users.length) ? body.users[0].localId : null;
+}
+
+function fixStudentNames() {
+  var token = ScriptApp.getOAuthToken();
+  var done = 0, skipped = 0, failed = 0;
+
+  for (var i = 0; i < NAME_FIXES.length; i++) {
+    var fix = NAME_FIXES[i];
+    var parts = fix.key.split("_");
+    var newKey = parts[0] + "_" + parts[1] + "_" + parts[2] + "_" + fix.newName;
+    var oldEmail = emailOfKey(fix.key);
+    var newEmail = emailOfKey(newKey);
+    var label = parts[0] + "학년 " + parts[1] + "반 " + parts[2] + "번 " + fix.newName;
+
+    var uid = lookupByEmail(token, oldEmail);
+    if (!uid) {
+      // 이미 고쳤는지 확인합니다.
+      if (lookupByEmail(token, newEmail)) {
+        Logger.log("건너뜀 — 이미 고쳐져 있습니다: " + label);
+        skipped++;
+      } else {
+        Logger.log("❌ 계정을 찾지 못했습니다: " + fix.key);
+        failed++;
+      }
+      continue;
+    }
+
+    // 새 주소를 다른 계정이 이미 쓰고 있으면 손대지 않습니다.
+    var taken = lookupByEmail(token, newEmail);
+    if (taken && taken !== uid) {
+      Logger.log("❌ " + label + " — 같은 이름의 다른 계정이 이미 있습니다. 손대지 않았습니다.");
+      failed++;
+      continue;
+    }
+
+    // 1) 로그인 주소 변경 (uid 는 그대로)
+    var upd = UrlFetchApp.fetch(
+      "https://identitytoolkit.googleapis.com/v1/projects/" + FIREBASE_PROJECT_ID + "/accounts:update",
+      {
+        method: "post", contentType: "application/json",
+        payload: JSON.stringify({ localId: uid, email: newEmail }),
+        headers: { Authorization: "Bearer " + token }, muteHttpExceptions: true
+      });
+    if (upd.getResponseCode() < 200 || upd.getResponseCode() >= 300) {
+      Logger.log("❌ " + label + " 주소 변경 실패: " + upd.getContentText().slice(0, 200));
+      failed++;
+      continue;
+    }
+
+    // 2) 프로필의 이름과 userKey
+    firestorePatch(token, "users/" + uid + "?updateMask.fieldPaths=name&updateMask.fieldPaths=userKey",
+      { name: { stringValue: fix.newName }, userKey: { stringValue: newKey } });
+
+    // 3) 색인 — 새 이름으로 계산한 값이 실제 uid 를 가리키게 합니다.
+    //    이게 없으면 비밀번호 초기화가 계정을 못 찾습니다.
+    firestorePatch(token, "accountIndex/" + sha1Hex(newKey).slice(0, 28),
+      { uid: { stringValue: uid } });
+
+    // 4) 갤러리에 보이는 이름
+    var fixedSubs = renameSubmissionsOf(token, uid, fix.newName);
+
+    Logger.log("✅ " + label + "  (제출물 " + fixedSubs + "건 표시 이름 정리)");
+    done++;
+  }
+
+  Logger.log("");
+  Logger.log("정리 " + done + "명 / 건너뜀 " + skipped + "명 / 실패 " + failed + "명");
+  if (done) Logger.log("해당 학생들은 이제 이름만 적어서 로그인하면 됩니다.");
+}
+
+// 이 학생의 제출물에 적힌 표시 이름을 바꿉니다. 제출물 자체는 그대로입니다.
+function renameSubmissionsOf(token, uid, newName) {
+  var res = UrlFetchApp.fetch(
+    "https://firestore.googleapis.com/v1/projects/" + FIREBASE_PROJECT_ID +
+    "/databases/(default)/documents:runQuery",
+    {
+      method: "post", contentType: "application/json",
+      payload: JSON.stringify({
+        structuredQuery: {
+          from: [{ collectionId: "submissions" }],
+          where: { fieldFilter: { field: { fieldPath: "uid" }, op: "EQUAL",
+                                  value: { stringValue: uid } } }
+        }
+      }),
+      headers: { Authorization: "Bearer " + token }, muteHttpExceptions: true
+    });
+  if (res.getResponseCode() < 200 || res.getResponseCode() >= 300) {
+    Logger.log("   제출물 조회 실패: " + res.getContentText().slice(0, 200));
+    return 0;
+  }
+  var rows = JSON.parse(res.getContentText());
+  var n = 0;
+  for (var i = 0; i < rows.length; i++) {
+    if (!rows[i].document) continue;
+    var path = rows[i].document.name.split("/documents/")[1];
+    firestorePatch(token, path + "?updateMask.fieldPaths=studentName",
+      { studentName: { stringValue: newName } });
+    n++;
+  }
+  return n;
 }
 
 function doPost(e) {
