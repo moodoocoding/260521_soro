@@ -8428,6 +8428,152 @@ function renameSubmissionsOf(token, uid, newName) {
   return n;
 }
 
+// ====================================================
+// [1회용] 계정이 두 개로 갈라진 학생을 정리합니다.
+//
+// 이름에 반을 적어 가입했다가 로그인이 안 되니 다시 가입한 학생들입니다.
+// fixStudentNames 가 "같은 이름의 다른 계정이 이미 있습니다" 로 거른 경우입니다.
+//
+// 두 학생의 사정이 달라 처리도 다릅니다.
+//
+//   연지훈(5-1-11) — 작품 5건과 받은 반응 3건이 전부 옛 계정에 있고,
+//     새로 만든 계정은 비어 있습니다. 빈 계정을 지우고 옛 계정의 이름만
+//     고칩니다. uid 가 그대로라 **반응까지 하나도 잃지 않습니다.**
+//
+//   허원(3-1-25) — 두 계정에 작품이 2건씩 나뉘어 있고 반응은 없습니다.
+//     옛 계정의 작품을 새 계정으로 옮긴 뒤 옛 계정을 지웁니다.
+//
+// 실행 방법: 편집기에서 mergeDuplicateAccounts 를 골라 ▷실행.
+// 그 다음 fixStudentNames 를 한 번 더 실행하면 연지훈까지 정리됩니다.
+// ====================================================
+
+function firestoreGet(token, path) {
+  var res = UrlFetchApp.fetch(
+    "https://firestore.googleapis.com/v1/projects/" + FIREBASE_PROJECT_ID +
+    "/databases/(default)/documents/" + path,
+    { headers: { Authorization: "Bearer " + token }, muteHttpExceptions: true });
+  return res.getResponseCode() === 200 ? JSON.parse(res.getContentText()) : null;
+}
+
+function firestoreDelete(token, path) {
+  var res = UrlFetchApp.fetch(
+    "https://firestore.googleapis.com/v1/projects/" + FIREBASE_PROJECT_ID +
+    "/databases/(default)/documents/" + path,
+    { method: "delete", headers: { Authorization: "Bearer " + token }, muteHttpExceptions: true });
+  return res.getResponseCode() >= 200 && res.getResponseCode() < 300;
+}
+
+// 이 uid 로 된 제출물을 모두 찾습니다.
+function submissionsOf(token, uid) {
+  var res = UrlFetchApp.fetch(
+    "https://firestore.googleapis.com/v1/projects/" + FIREBASE_PROJECT_ID +
+    "/databases/(default)/documents:runQuery",
+    {
+      method: "post", contentType: "application/json",
+      payload: JSON.stringify({ structuredQuery: {
+        from: [{ collectionId: "submissions" }],
+        where: { fieldFilter: { field: { fieldPath: "uid" }, op: "EQUAL",
+                                value: { stringValue: uid } } } } }),
+      headers: { Authorization: "Bearer " + token }, muteHttpExceptions: true
+    });
+  if (res.getResponseCode() !== 200) return null;
+  var rows = JSON.parse(res.getContentText()), out = [];
+  for (var i = 0; i < rows.length; i++) if (rows[i].document) out.push(rows[i].document);
+  return out;
+}
+
+function deleteAuthAccount(token, uid) {
+  var res = UrlFetchApp.fetch(
+    "https://identitytoolkit.googleapis.com/v1/projects/" + FIREBASE_PROJECT_ID + "/accounts:delete",
+    {
+      method: "post", contentType: "application/json",
+      payload: JSON.stringify({ localId: uid }),
+      headers: { Authorization: "Bearer " + token }, muteHttpExceptions: true
+    });
+  return res.getResponseCode() >= 200 && res.getResponseCode() < 300;
+}
+
+function mergeDuplicateAccounts() {
+  var token = ScriptApp.getOAuthToken();
+
+  // ---------- 연지훈 : 비어 있는 새 계정을 지웁니다 ----------
+  var jiKey = "5_1_11_연지훈";
+  var jiUid = lookupByEmail(token, emailOfKey(jiKey));
+  if (!jiUid) {
+    Logger.log("연지훈 — 지울 빈 계정이 없습니다 (이미 정리된 듯).");
+  } else {
+    var jiSubs = submissionsOf(token, jiUid);
+    if (jiSubs === null) {
+      Logger.log("❌ 연지훈 — 제출물을 확인하지 못해 손대지 않았습니다.");
+    } else if (jiSubs.length > 0) {
+      // 예상과 다릅니다. 작품이 있으면 절대 지우지 않습니다.
+      Logger.log("❌ 연지훈 — 새 계정에 작품이 " + jiSubs.length + "건 있습니다. 손대지 않았습니다.");
+    } else {
+      firestoreDelete(token, "users/" + jiUid);
+      firestoreDelete(token, "accountIndex/" + sha1Hex(jiKey).slice(0, 28));
+      if (deleteAuthAccount(token, jiUid)) {
+        Logger.log("✅ 연지훈 — 비어 있던 중복 계정을 지웠습니다.");
+        Logger.log("   이제 fixStudentNames 를 다시 실행하면 이름이 정리됩니다.");
+      } else {
+        Logger.log("❌ 연지훈 — 계정 삭제에 실패했습니다.");
+      }
+    }
+  }
+
+  Logger.log("");
+
+  // ---------- 허원 : 옛 계정의 작품을 새 계정으로 옮깁니다 ----------
+  var oldKey = "3_1_25_1반허원", newKey = "3_1_25_허원";
+  var fromUid = lookupByEmail(token, emailOfKey(oldKey));
+  var toUid   = lookupByEmail(token, emailOfKey(newKey));
+  if (!fromUid) { Logger.log("허원 — 옮길 옛 계정이 없습니다 (이미 정리된 듯)."); return; }
+  if (!toUid)   { Logger.log("❌ 허원 — 받을 계정을 찾지 못했습니다."); return; }
+
+  var subs = submissionsOf(token, fromUid);
+  if (subs === null) { Logger.log("❌ 허원 — 제출물을 확인하지 못했습니다."); return; }
+
+  var moved = 0, kept = 0;
+  for (var i = 0; i < subs.length; i++) {
+    var doc = subs[i];
+    var contestId = doc.fields.contestId ? doc.fields.contestId.stringValue : "";
+    if (!contestId) continue;
+    var target = "submissions/" + contestId + "__" + toUid;
+
+    // 받는 쪽에 같은 공모전 작품이 이미 있으면 덮어쓰지 않습니다.
+    if (firestoreGet(token, target)) {
+      Logger.log("   건너뜀 — " + contestId + " 는 새 계정에 이미 있습니다.");
+      kept++;
+      continue;
+    }
+
+    var fields = doc.fields;
+    fields.uid = { stringValue: toUid };
+    fields.studentName = { stringValue: "허원" };
+    fields.userKey = { stringValue: newKey };
+
+    var put = UrlFetchApp.fetch(
+      "https://firestore.googleapis.com/v1/projects/" + FIREBASE_PROJECT_ID +
+      "/databases/(default)/documents/" + target,
+      {
+        method: "patch", contentType: "application/json",
+        payload: JSON.stringify({ fields: fields }),
+        headers: { Authorization: "Bearer " + token }, muteHttpExceptions: true
+      });
+    if (put.getResponseCode() < 200 || put.getResponseCode() >= 300) {
+      Logger.log("   ❌ " + contestId + " 옮기기 실패: " + put.getContentText().slice(0, 150));
+      continue;
+    }
+    firestoreDelete(token, doc.name.split("/documents/")[1]);
+    moved++;
+  }
+
+  Logger.log("✅ 허원 — 작품 " + moved + "건을 옮겼습니다" + (kept ? " (겹쳐서 남긴 것 " + kept + "건)" : "") + ".");
+  firestoreDelete(token, "users/" + fromUid);
+  firestoreDelete(token, "accountIndex/" + sha1Hex(oldKey).slice(0, 28));
+  if (deleteAuthAccount(token, fromUid)) Logger.log("   옛 계정을 지웠습니다.");
+  else Logger.log("   ⚠ 옛 계정 삭제에 실패했습니다. 작품은 이미 옮겨졌습니다.");
+}
+
 function doPost(e) {
   var response = { status: "error", message: "알 수 없는 요청" };
   
