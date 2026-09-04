@@ -13,7 +13,7 @@ import {
   signOut, onAuthStateChanged, updatePassword
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, setDoc, deleteDoc, updateDoc,
+  getFirestore, doc, getDoc, setDoc, deleteDoc, updateDoc, deleteField,
   collection, query, where, getDocs
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import {
@@ -174,6 +174,19 @@ const fail = message => ({ status: "error", message });
 // 화면 코드가 기대하는 제출물 모양으로 맞춰줍니다.
 function toEntry(d) {
   const x = d.data();
+  const entryData = { ...(x.data || {}) };
+
+  // 2026-09-04 이전 관리자 토글은 prizeStatus/isStarred를 data 안이 아니라
+  // 문서 최상위에 잘못 저장했습니다. 화면은 data.*만 읽기 때문에 클릭 직후에는
+  // 바뀐 것처럼 보여도 새로 로그인하면 사라졌습니다. 이미 저장된 값을 잃지 않도록
+  // 중첩 값이 없을 때만 옛 최상위 값을 읽는 호환 경로를 둡니다.
+  if (entryData.prizeStatus == null && x.prizeStatus != null) {
+    entryData.prizeStatus = x.prizeStatus;
+  }
+  if (entryData.isStarred == null && x.isStarred != null) {
+    entryData.isStarred = x.isStarred;
+  }
+
   return {
     id: d.id,
     contestId: x.contestId,
@@ -184,7 +197,7 @@ function toEntry(d) {
     studentClass: x.studentClass,
     studentNumber: x.studentNumber,
     timestamp: x.timestamp || "",
-    data: x.data || {}
+    data: entryData
   };
 }
 
@@ -375,12 +388,24 @@ const actions = {
   },
 
   async updateSubmissionStarStatus({ id, isStarred }) {
-    try { await updateDoc(doc(db, "submissions", id), { isStarred: !!isStarred }); return ok({}); }
+    try {
+      await updateDoc(doc(db, "submissions", id), {
+        "data.isStarred": !!isStarred,
+        isStarred: deleteField()
+      });
+      return ok({});
+    }
     catch (e) { return fail("관리자 권한이 필요합니다."); }
   },
 
   async updateSubmissionPrizeStatus({ id, prizeStatus }) {
-    try { await updateDoc(doc(db, "submissions", id), { prizeStatus }); return ok({}); }
+    try {
+      await updateDoc(doc(db, "submissions", id), {
+        "data.prizeStatus": prizeStatus,
+        prizeStatus: deleteField()
+      });
+      return ok({});
+    }
     catch (e) { return fail("관리자 권한이 필요합니다."); }
   },
 
